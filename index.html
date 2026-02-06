@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Supercell AI Game Hackathon</title>
+
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: black;
+    }
+
+    #app {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    #layer-main {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+    }
+
+    #layer-effect {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    #layer-ui {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: auto;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+    <div id="layer-main"></div>
+    <div id="layer-effect"></div>
+    <div id="layer-ui"></div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+{
+  "campaign": {
+    "arc": {
+      "title": "The Weight of Gold",
+      "scope": "From arrival at the Black Keep to the defeat of the dragon Avarrax",
+      "themes": [
+        "greed as gravity",
+        "hoarding versus circulation",
+        "power through denial"
+      ],
+      "tone": "grim, oppressive, inevitable"
+    },
+
+    "story_overview": {
+      "premise": "An ancient dragon has amassed a hoard so vast that it has quietly strangled the surrounding region. Wealth no longer circulates; cities weaken without being burned. All gold flows toward the Black Keep.",
+      "arc_start": "The party arrives at the Black Keep and realizes it has not been conquered, but fed.",
+      "arc_end": "The confrontation with Avarrax in the throne hall, where possession turns into violence."
+    },
+
+    "pilot_events": [
+      "Trade routes collapse without open war",
+      "Towns abandon defenses due to unpaid guards",
+      "Caravans disappear without signs of battle",
+      "Records reveal decades of tribute paid to the Black Keep",
+      "The party confirms the keep as the source of the region’s economic suffocation"
+    ]
+  },
+
+  "setting": {
+    "primary_location": {
+      "name": "The Black Keep",
+      "description": "A massive fortress left structurally intact but spiritually hollow, its halls increasingly overtaken by gold rather than people.",
+      "narrative_function": "A place where accumulation replaces purpose"
+    },
+
+    "final_scene_location": {
+      "name": "Throne Hall",
+      "description": "Once a seat of rule, now buried beneath mountains of gold, shattered stone, and scorched pillars. The hoard dominates the space, bending light and sound.",
+      "environmental_elements": [
+        "unstable piles of gold",
+        "collapsed pillars",
+        "cracked obsidian floor",
+        "smoke and heat distortion"
+      ]
+    }
+  },
+
+  "party": {
+    "swordsman": {
+      "name": "Ronan",
+      "class": "Swordsman",
+      "role": "frontline defender",
+      "health_percent": 72,
+      "conditions": [
+        "shoulder strain",
+        "armor scarred but functional"
+      ],
+      "arc_perspective": "Views the dragon as a siege engine that must be broken before anything else can recover."
+    },
+
+    "archer": {
+      "name": "Elric",
+      "class": "Archer",
+      "role": "ranged precision",
+      "health_percent": 85,
+      "conditions": [
+        "minor exhaustion",
+        "limited specialty arrows"
+      ],
+      "arc_perspective": "Has seen villages stripped of defense by lack of funds and focuses on ending the threat efficiently."
+    },
+
+    "magician": {
+      "name": "Seraphine",
+      "class": "Magician",
+      "role": "magical control and burst",
+      "health_percent": 64,
+      "conditions": [
+        "mana strain",
+        "spellcasting restraint"
+      ],
+      "arc_perspective": "Understands that dragon hoards distort reality and that destroying them carries dangerous consequences."
+    }
+  },
+
+  "boss": {
+    "identity": {
+      "name": "Avarrax",
+      "title": "The Gilded Tyrant",
+      "type": "Ancient Dragon"
+    },
+
+    "core_motivation": {
+      "belief": "All gold must belong to him, because possession proves dominance.",
+      "goal": "To remove wealth from circulation and make the world dependent on his hoard.",
+      "fear": "Loss — not of life, but of possession."
+    },
+
+    "personality": [
+      "calculating",
+      "possessive",
+      "contemptuous",
+      "unyielding"
+    ],
+
+    "relationship_to_arc": {
+      "role": "The gravitational center of the region’s collapse",
+      "view_of_party": "Thieves who dare to claim what has already been taken",
+      "stance": "Will not negotiate, retreat, or relinquish"
+    },
+
+    "lair_context": {
+      "location": "Throne Hall of the Black Keep",
+      "symbolism": "A seat of rule replaced by accumulated wealth",
+      "state": "Fully entrenched, hoard at maximum concentration"
+    }
+  },
+
+  "final_scene": {
+    "entry_moment": "The party steps into the throne hall and sees the hoard for the first time, realizing the scale of what has been removed from the world.",
+    "stakes": [
+      "If Avarrax remains, the region will continue to collapse without open war",
+      "If the hoard is destroyed recklessly, the keep may collapse entirely",
+      "There is no resolution without loss"
+    ],
+    "narrative_pressure": {
+      "urgency": 0.7,
+      "danger": 0.9,
+      "hope": 0.4
+    }
+  }
+}
