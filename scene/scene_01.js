@@ -26,7 +26,7 @@ async function act1_OpeningNarrative(scene) {
   // Store for later acts
   window.campaignData = campaignData;
   
-  // Generate initial narrative using deepseek-r1:7b
+  // Generate initial narrative using deepseek-r1:8b
   scene.showThinking();
   
   let narrative = null;
@@ -50,7 +50,7 @@ async function act1_OpeningNarrative(scene) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "deepseek-r1:7b",
+        model: "deepseek-r1:8b",
         messages: [
           {
             role: "system",
@@ -401,7 +401,7 @@ Respond with just: "1", "2", or "both"`;
       
     } catch (error) {
       console.error("Error in conversation:", error);
-      scene.say("The conversation pauses for a moment...");
+      scene.say("The conversation pauses for a moment..." );
       setTimeout(() => {
         handleConversationLoop(scene, playerCharacter, aiCharacters, campaignData);
       }, 2000);
@@ -410,6 +410,42 @@ Respond with just: "1", "2", or "both"`;
 }
 
 async function generateCharacterResponse(character, playerCharacter, userInput, campaignData) {
+  // Build concise character context
+  const characterPersonality = {
+    "Ronan": "A seasoned swordsman who protects allies. Speaks from experience, not bravado. Favors defensive positioning and reduces risk. Calm, steady, grounded.",
+    "Elric": "A disciplined archer who values efficiency over spectacle. Reads the battlefield spatially. Speaks concisely, pragmatically. Favors distance and precision.",
+    "Seraphine": "A magician who knows power reshapes reality. Acts with restraint, warns of magical consequences. Speaks carefully with grave control."
+  };
+
+  // Build status info with safety checks
+  let statusInfo = "";
+  if (character.resource) {
+    statusInfo += `- ${character.resource.type}: ${character.resource.current}/${character.resource.max}\n`;
+  }
+  if (character.health_percent !== undefined) {
+    statusInfo += `- Health: ${character.health_percent}%\n`;
+  }
+  if (character.conditions && character.conditions.length > 0) {
+    statusInfo += `- Conditions: ${character.conditions.join(', ')}`;
+  }
+
+  const systemContent = `You are ${character.name}, a ${character.class || character.role}.
+
+PERSONALITY: ${characterPersonality[character.name] || "A brave adventurer"}
+
+PERSPECTIVE: ${character.arc_perspective || "Ready to face the challenge ahead"}
+
+STATUS:
+${statusInfo || "- Ready for action"}
+
+CONTEXT: At the Black Keep to confront dragon Avarrax. ${campaignData.campaign.story_overview.premise}
+
+RULES:
+- Stay in character
+- Speak naturally (2-3 sentences max)
+- Never break the fourth wall
+- Favor survival and caution`;
+
   const response = await fetch("https://excitingly-unsolitary-jayson.ngrok-free.dev/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -418,10 +454,7 @@ async function generateCharacterResponse(character, playerCharacter, userInput, 
       messages: [
         {
           role: "system",
-          content: `You are ${character.name}, a ${character.class} (${character.role}). 
-Perspective: ${character.arc_perspective}
-Context: You're at the Black Keep to confront the dragon Avarrax.
-Respond as this character would, staying in character. Keep responses to 2-3 sentences.`
+          content: systemContent
         },
         {
           role: "user",
@@ -469,7 +502,7 @@ async function act4_GoldenHall(scene, playerCharacter, aiCharacters, campaignDat
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "deepseek-r1:7b",
+        model: "deepseek-r1:8b",
         messages: [
           {
             role: "system",
@@ -548,7 +581,7 @@ async function act5_ThroneRoom(scene, playerCharacter, aiCharacters, campaignDat
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "deepseek-r1:7b",
+        model: "deepseek-r1:8b",
         messages: [
           {
             role: "system",
@@ -566,8 +599,9 @@ Create a dramatic, tension-filled narrative (4-6 paragraphs) describing:
 - The weight of this moment
 - The silence before the confrontation
 
-Dragon description: Avarrax is a ${campaignData.entities.avarrax.description}
-Power: ${campaignData.entities.avarrax.true_danger}
+Dragon: ${campaignData.boss.identity.name}, ${campaignData.boss.identity.title} - ${campaignData.boss.identity.type}
+Personality: ${campaignData.boss.personality.join(', ')}
+Motivation: ${campaignData.boss.core_motivation.belief}
 
 This is the moment before the battle begins. Build maximum tension. End with the dragon becoming aware of them.`
           }

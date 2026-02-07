@@ -2,46 +2,48 @@
   "campaign": {
     "arc": {
       "title": "The Weight of Gold",
-      "scope": "From arrival at the Black Keep to the defeat of the dragon Avarrax",
+      "scope": "Arrival at the Black Keep to the defeat of Avarrax",
       "themes": [
-        "greed as gravity",
-        "hoarding versus circulation",
-        "power through denial"
+        "greed_as_gravity",
+        "hoarding_vs_circulation",
+        "power_through_denial"
       ],
-      "tone": "grim, oppressive, inevitable"
+      "tone": "grim_oppressive_inevitable"
     },
-
     "story_overview": {
-      "premise": "An ancient dragon has amassed a hoard so vast that it has quietly strangled the surrounding region. Wealth no longer circulates; cities weaken without being burned. All gold flows toward the Black Keep.",
+      "premise": "An ancient dragon has accumulated a hoard so vast that wealth no longer circulates. Cities weaken without being burned. All gold flows toward the Black Keep.",
       "arc_start": "The party arrives at the Black Keep and realizes it has not been conquered, but fed.",
       "arc_end": "The confrontation with Avarrax in the throne hall, where possession turns into violence."
     },
-
     "pilot_events": [
-      "Trade routes collapse without open war",
-      "Towns abandon defenses due to unpaid guards",
-      "Caravans disappear without signs of battle",
-      "Records reveal decades of tribute paid to the Black Keep",
-      "The party confirms the keep as the source of the region’s economic suffocation"
+      "trade_routes_collapse_without_war",
+      "towns_abandon_defenses_due_to_unpaid_guards",
+      "caravans_disappear_without_battle",
+      "records_reveal_decades_of_tribute",
+      "black_keep_confirmed_as_economic_sink"
     ]
   },
 
   "setting": {
     "primary_location": {
       "name": "The Black Keep",
-      "description": "A massive fortress left structurally intact but spiritually hollow, its halls increasingly overtaken by gold rather than people.",
-      "narrative_function": "A place where accumulation replaces purpose"
+      "description": "A massive fortress left structurally intact but spiritually hollow, its halls overtaken by gold rather than people.",
+      "narrative_function": "accumulation_replaces_purpose"
     },
-
     "final_scene_location": {
       "name": "Throne Hall",
-      "description": "Once a seat of rule, now buried beneath mountains of gold, shattered stone, and scorched pillars. The hoard dominates the space, bending light and sound.",
+      "description": "Once a seat of rule, now buried beneath gold, shattered stone, and scorched pillars.",
       "environmental_elements": [
-        "unstable piles of gold",
-        "collapsed pillars",
-        "cracked obsidian floor",
-        "smoke and heat distortion"
-      ]
+        "unstable_gold_piles",
+        "collapsed_pillars",
+        "cracked_obsidian_floor",
+        "smoke_and_heat_distortion"
+      ],
+      "environmental_risks": {
+        "hoard_instability": 0.8,
+        "structural_collapse": 0.6,
+        "magic_amplification": 0.7
+      }
     }
   },
 
@@ -49,37 +51,138 @@
     "swordsman": {
       "name": "Ronan",
       "class": "Swordsman",
-      "role": "frontline defender",
+      "role": "frontline_defender",
       "health_percent": 72,
+      "resource": {
+        "type": "stamina",
+        "current": 58,
+        "max": 80,
+        "regen_rate": 6
+      },
       "conditions": [
-        "shoulder strain",
-        "armor scarred but functional"
+        "shoulder_strain",
+        "armor_scarred_but_functional"
       ],
-      "arc_perspective": "Views the dragon as a siege engine that must be broken before anything else can recover."
+      "arc_perspective": "Views the dragon as a siege engine that must be broken before recovery is possible.",
+      "actions": {
+        "attack": {
+          "type": "melee",
+          "cost": 12,
+          "risk": "low",
+          "intent": "maintain pressure",
+          "requirements": ["melee_range"]
+        },
+        "heavy_attack": {
+          "type": "melee",
+          "cost": 25,
+          "risk": "high",
+          "intent": "break guard or stagger",
+          "requirements": ["melee_range", "enemy_exposed"]
+        },
+        "dodge": {
+          "type": "movement",
+          "cost": 15,
+          "risk": "low",
+          "intent": "evade imminent danger",
+          "requirements": ["space_to_move"]
+        },
+        "cast_defense": {
+          "type": "magic_assist",
+          "cost": 10,
+          "risk": "low",
+          "intent": "reinforce defense",
+          "requirements": []
+        }
+      }
     },
 
     "archer": {
       "name": "Elric",
       "class": "Archer",
-      "role": "ranged precision",
+      "role": "ranged_precision",
       "health_percent": 85,
+      "resource": {
+        "type": "stamina",
+        "current": 66,
+        "max": 75,
+        "regen_rate": 8
+      },
       "conditions": [
-        "minor exhaustion",
-        "limited specialty arrows"
+        "minor_exhaustion",
+        "limited_specialty_arrows"
       ],
-      "arc_perspective": "Has seen villages stripped of defense by lack of funds and focuses on ending the threat efficiently."
+      "arc_perspective": "Focuses on ending the threat efficiently after seeing defenses fail due to unpaid guards.",
+      "actions": {
+        "shoot": {
+          "type": "ranged",
+          "cost": 10,
+          "risk": "low",
+          "intent": "precise damage",
+          "requirements": ["clear_line_of_sight"]
+        },
+        "shoot_multiple": {
+          "type": "ranged",
+          "cost": 22,
+          "risk": "medium",
+          "intent": "suppress movement",
+          "requirements": ["clear_line_of_sight", "stable_footing"]
+        },
+        "hide": {
+          "type": "stealth",
+          "cost": 14,
+          "risk": "low",
+          "intent": "break line of sight",
+          "requirements": ["available_cover"]
+        },
+        "cast_defense": {
+          "type": "magic_assist",
+          "cost": 8,
+          "risk": "low",
+          "intent": "minor warding",
+          "requirements": []
+        }
+      }
     },
 
     "magician": {
       "name": "Seraphine",
       "class": "Magician",
-      "role": "magical control and burst",
+      "role": "magical_control_and_support",
       "health_percent": 64,
+      "resource": {
+        "type": "mana",
+        "current": 48,
+        "max": 90,
+        "regen_rate": 5
+      },
       "conditions": [
-        "mana strain",
-        "spellcasting restraint"
+        "mana_strain",
+        "spellcasting_restraint"
       ],
-      "arc_perspective": "Understands that dragon hoards distort reality and that destroying them carries dangerous consequences."
+      "arc_perspective": "Knows dragon hoards distort reality and that destroying them risks collapse.",
+      "actions": {
+        "cast_attack": {
+          "type": "magic_offense",
+          "cost": 20,
+          "risk": "medium",
+          "intent": "focused elemental burst",
+          "requirements": []
+        },
+        "cast_defense": {
+          "type": "magic_defense",
+          "cost": 18,
+          "risk": "low",
+          "intent": "stabilize and mitigate damage",
+          "requirements": []
+        },
+        "heal": {
+          "type": "magic_restore",
+          "cost": 25,
+          "risk": "medium",
+          "intent": "prevent ally collapse",
+          "requirements": ["ally_injured"]
+        }
+      }
     }
   },
 
@@ -87,13 +190,26 @@
     "identity": {
       "name": "Avarrax",
       "title": "The Gilded Tyrant",
-      "type": "Ancient Dragon"
+      "type": "ancient_dragon",
+      "description": "A colossal dragon whose scales have taken on the golden hue of his hoard. His eyes burn with cold, calculating greed rather than draconic fury."
+    },
+
+    "health": {
+      "current_percent": 100,
+      "phase_thresholds": [75, 45, 20]
+    },
+
+    "resource": {
+      "type": "stamina",
+      "current": 120,
+      "max": 120,
+      "regen_rate": 10
     },
 
     "core_motivation": {
-      "belief": "All gold must belong to him, because possession proves dominance.",
-      "goal": "To remove wealth from circulation and make the world dependent on his hoard.",
-      "fear": "Loss — not of life, but of possession."
+      "belief": "All gold must belong to him because possession proves dominance.",
+      "goal": "Remove wealth from circulation and bind the world to his hoard.",
+      "fear": "loss_of_possession"
     },
 
     "personality": [
@@ -103,30 +219,143 @@
       "unyielding"
     ],
 
-    "relationship_to_arc": {
-      "role": "The gravitational center of the region’s collapse",
-      "view_of_party": "Thieves who dare to claim what has already been taken",
-      "stance": "Will not negotiate, retreat, or relinquish"
+    "combat_traits": {
+      "immobile_center_of_mass": true,
+      "hoard_linked_defense": true,
+      "rage_on_hoard_damage": true
     },
 
     "lair_context": {
-      "location": "Throne Hall of the Black Keep",
-      "symbolism": "A seat of rule replaced by accumulated wealth",
-      "state": "Fully entrenched, hoard at maximum concentration"
+      "location": "Throne Hall",
+      "state": "fully_entrenched",
+      "symbolism": "rule_replaced_by_accumulation"
+    },
+
+    "actions": {
+      "fire_breath": {
+        "type": "area_attack",
+        "damage_type": "fire",
+        "targets": "all_party_members",
+        "cost": 35,
+        "risk": "high",
+        "intent": "overwhelm intruders and reassert dominance",
+        "requirements": [],
+        "narrative_effects": [
+          "extreme_heat",
+          "reduced_visibility",
+          "environmental_instability_increase"
+        ]
+      },
+
+      "claw_attack": {
+        "type": "single_target_attack",
+        "damage_type": "physical",
+        "targets": "one_party_member",
+        "cost": 18,
+        "risk": "medium",
+        "intent": "punish a specific intruder",
+        "requirements": [
+          "target_in_reach"
+        ],
+        "narrative_effects": [
+          "knockback",
+          "armor_damage"
+        ]
+      },
+
+      "tail_sweep": {
+        "type": "area_attack",
+        "damage_type": "physical",
+        "targets": "all_nearby_party_members",
+        "cost": 25,
+        "risk": "medium",
+        "intent": "clear space and reposition",
+        "requirements": ["enemies_flanking"],
+        "narrative_effects": [
+          "knockback",
+          "gold_pile_collapse",
+          "positioning_disruption"
+        ]
+      },
+
+      "golden_roar": {
+        "type": "status_effect",
+        "damage_type": "magical",
+        "targets": "all_party_members",
+        "cost": 30,
+        "risk": "low",
+        "intent": "break morale and induce greed",
+        "requirements": [],
+        "narrative_effects": [
+          "temporary_confusion",
+          "greed_temptation",
+          "magical_pressure"
+        ]
+      },
+
+      "hoard_shift": {
+        "type": "environmental",
+        "damage_type": "physical",
+        "targets": "area",
+        "cost": 20,
+        "risk": "low",
+        "intent": "use terrain as weapon",
+        "requirements": ["unstable_gold_piles_nearby"],
+        "narrative_effects": [
+          "gold_avalanche",
+          "movement_restriction",
+          "cover_destruction"
+        ]
+      }
+    },
+
+    "phase_behaviors": {
+      "phase_1": {
+        "health_range": [100, 75],
+        "attitude": "contemptuous_dismissive",
+        "preferred_actions": ["fire_breath", "claw_attack"],
+        "dialogue_tone": "You dare disturb what is mine?"
+      },
+      "phase_2": {
+        "health_range": [75, 45],
+        "attitude": "irritated_aggressive",
+        "preferred_actions": ["tail_sweep", "golden_roar", "fire_breath"],
+        "dialogue_tone": "You will not take a single coin!"
+      },
+      "phase_3": {
+        "health_range": [45, 20],
+        "attitude": "desperate_possessive",
+        "preferred_actions": ["hoard_shift", "fire_breath", "golden_roar"],
+        "dialogue_tone": "All of it is MINE! MINE!"
+      },
+      "phase_4": {
+        "health_range": [20, 0],
+        "attitude": "rabid_cornered",
+        "preferred_actions": ["fire_breath", "claw_attack", "tail_sweep"],
+        "dialogue_tone": "If I cannot have it, none shall!"
+      }
     }
   },
 
   "final_scene": {
-    "entry_moment": "The party steps into the throne hall and sees the hoard for the first time, realizing the scale of what has been removed from the world.",
+    "entry_moment": "The party enters the throne hall and sees the scale of wealth removed from the world.",
     "stakes": [
-      "If Avarrax remains, the region will continue to collapse without open war",
-      "If the hoard is destroyed recklessly, the keep may collapse entirely",
-      "There is no resolution without loss"
+      "region_continues_to_collapse_if_avarrax_survives",
+      "keep_may_collapse_if_hoard_is_destroyed",
+      "no_resolution_without_loss"
     ],
     "narrative_pressure": {
       "urgency": 0.7,
       "danger": 0.9,
       "hope": 0.4
     }
+  },
+
+  "global_decision_rules": {
+    "resource_check_required": true,
+    "prefer_low_risk_actions": true,
+    "survival_priority": true,
+    "magic_environment_multiplier": 1.5,
+    "hoard_damage_consequence": "environmental_instability_increases"
   }
 }
