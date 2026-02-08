@@ -4,7 +4,6 @@ import { FBXLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/j
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
 import { EffectManager } from "./EffectManager.js";
 import { Boss } from "./Boss.js";
-import { voiceService, renderDialogueWithVoice } from '../voice-service.js';
 import { FaceTracker, headPoseToCamera, getWebcamStream } from '../headTracking.js';
 
 // Character class for managing hero characters (Swordman, Archer, Magician)
@@ -1236,30 +1235,33 @@ class TurnSystem {
     
     document.body.appendChild(dialogueBox);
     
-    // Type out the narrative with voice support
-    let dialogueController = null;
+    // Type out the narrative
     let narrativeCompleted = false;
+    let currentIndex = 0;
+    const typeSpeed = 30;
     
-    dialogueController = renderDialogueWithVoice(
-      textBox,
-      narrative,
-      'boss', // Character speaking is the boss
-      30, // typeSpeed
-      () => {
+    const typeWriter = () => {
+      if (currentIndex < narrative.length) {
+        textBox.textContent = narrative.substring(0, currentIndex + 1);
+        currentIndex++;
+        setTimeout(typeWriter, typeSpeed);
+      } else {
         narrativeCompleted = true;
         hintBox.textContent = 'Press TAB to continue...';
-      },
-      true // enableVoice
-    );
+      }
+    };
+    typeWriter();
     
     // Wait for TAB key
     await new Promise(resolve => {
       const handleKey = (e) => {
         if (e.key === 'Tab') {
           e.preventDefault();
-          if (dialogueController && dialogueController.isPlaying()) {
-            // Fast-forward dialogue (stop voice and show full text)
-            dialogueController.stop();
+          if (!narrativeCompleted) {
+            // Fast-forward dialogue
+            currentIndex = narrative.length;
+            textBox.textContent = narrative;
+            narrativeCompleted = true;
             hintBox.textContent = 'Press TAB to continue...';
           } else {
             // Continue to next scene
@@ -2218,101 +2220,12 @@ export async function run({ scene }) {
     console.log('  1, 2, 3 - Use action 1, 2, or 3');
     console.log('\nDURING BOSS ATTACK:');
     console.log('  3 - Quick defend (block/dodge)');
-    console.log('\n🎤 VOICE COMMANDS (Hold LEFT SHIFT to speak):');
-    console.log('  Say "slash", "heavy", "block", "dodge", "spell", "heal", "stab"');
     console.log('\n🛡️ DEFENSE: During boss attacks, press 3 to block (Swordman) or dodge (Archer)');
     console.log('=============================================\n');
     
-    // Setup push-to-talk voice recognition for combat commands
-    let recognition = null;
-    let isRecording = false;
-    
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
-      
-      recognition.onresult = (event) => {
-        const last = event.results.length - 1;
-        const command = event.results[last][0].transcript.toLowerCase().trim();
-        console.log('🎤 Voice command:', command);
-        
-        // Handle combat commands for user character
-        if (window.currentPlayerCharacter && !window.currentPlayerCharacter.isDead) {
-          const char = window.currentPlayerCharacter;
-          
-          // Attack commands
-          if (command.includes('slash') || command.includes('attack')) {
-            if (char.name === 'Swordman') {
-              window.turnSystem.playerAction(char, 'slash');
-            } else if (char.name === 'Archer') {
-              window.turnSystem.playerAction(char, 'shootarrow');
-            }
-          } else if (command.includes('heavy') || command.includes('strong')) {
-            if (char.name === 'Swordman') {
-              window.turnSystem.playerAction(char, 'heavyslash');
-            }
-          } else if (command.includes('stab')) {
-            if (char.name === 'Archer') {
-              window.turnSystem.playerAction(char, 'stab');
-            }
-          } else if (command.includes('spell') || command.includes('cast')) {
-            if (char.name === 'Magician') {
-              window.turnSystem.playerAction(char, 'castspell');
-            }
-          } else if (command.includes('heal')) {
-            if (char.name === 'Magician') {
-              window.turnSystem.playerAction(char, 'healstamina');
-            }
-          }
-          // Defense commands
-          else if (command.includes('block') || command.includes('defend')) {
-            if (char.name === 'Swordman' && char.isInDecisionWindow) {
-              char.performAction('block', THREE.LoopOnce);
-              char.makeDecision('block');
-            }
-          } else if (command.includes('dodge') || command.includes('evade')) {
-            if (char.name === 'Archer' && char.isInDecisionWindow) {
-              char.performAction('dodge', THREE.LoopOnce);
-              char.makeDecision('dodge');
-            }
-          }
-        }
-      };
-      
-      recognition.onend = () => {
-        isRecording = false;
-      };
-      
-      recognition.onerror = (event) => {
-        console.warn('Speech recognition error:', event.error);
-        isRecording = false;
-      };
-      
-      console.log('✅ Voice control enabled - hold LEFT SHIFT and speak');
-    } else {
-      console.warn('⚠️ Speech recognition not supported in this browser');
-    }
-    
-    // Keyboard listener for combat actions and push-to-talk
+    // Keyboard listener for combat actions
     window.addEventListener('keydown', (e) => {
       const key = e.key.toLowerCase();
-      
-      // Push-to-talk: Start voice recognition on left shift press
-      if (e.key === 'Shift' && e.location === KeyboardEvent.DOM_KEY_LOCATION_LEFT) {
-        if (recognition && !isRecording) {
-          try {
-            recognition.start();
-            isRecording = true;
-            console.log('🎤 Recording... (release shift to stop)');
-          } catch (err) {
-            console.warn('Could not start recording:', err);
-          }
-        }
-        return;
-      }
       
       // Start battle with TAB
       if (key === 'tab') {
@@ -2372,16 +2285,6 @@ export async function run({ scene }) {
         
         if (defendedCount > 0) {
           return; // Defense action handled
-        }
-      }
-    });
-    
-    // Stop voice recognition on left shift release
-    window.addEventListener('keyup', (e) => {
-      if (e.key === 'Shift' && e.location === KeyboardEvent.DOM_KEY_LOCATION_LEFT) {
-        if (recognition && isRecording) {
-          recognition.stop();
-          console.log('🎤 Processing voice command...');
         }
       }
     });
