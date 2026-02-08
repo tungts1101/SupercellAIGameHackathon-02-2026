@@ -1,4 +1,5 @@
 import { voiceService } from '../voice-service.js';
+import { OLLAMA_BASE_URL } from '../config.js';
 
 // Scene 03 - Storyteller ending scene
 export async function run({ scene, result = 'LOSE' }) {
@@ -55,7 +56,7 @@ export async function run({ scene, result = 'LOSE' }) {
   scene.showThinking();
   
   try {
-    const response = await fetch('https://excitingly-unsolitary-jayson.ngrok-free.dev/api/chat', {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

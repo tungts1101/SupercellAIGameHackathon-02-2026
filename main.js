@@ -1,6 +1,6 @@
 import { createScene } from "./util.js";
-import * as scene_02 from "./scene/scene_02.js";
+import * as scene_01 from "./scene/scene_01.js";
 
 const scene = createScene();
 
-scene_02.run({ scene });
+scene_01.run({ scene });

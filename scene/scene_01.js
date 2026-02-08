@@ -1,4 +1,5 @@
 import { voiceService } from '../voice-service.js';
+import { OLLAMA_BASE_URL } from '../config.js';
 
 export async function run({ scene }) {
   // ACT 1: Opening Narrative
@@ -74,7 +75,7 @@ async function act1_OpeningNarrative(scene) {
     ];
     const randomPerspective = perspectives[Math.floor(Math.random() * perspectives.length)];
     
-    const response = await fetch("https://excitingly-unsolitary-jayson.ngrok-free.dev/api/chat", {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -375,7 +376,7 @@ Look for phrases like: "let's go", "we should go", "proceed", "move forward", "e
 
 Respond with only: "yes" or "no"`;
 
-      const endCheckResponse = await fetch("https://excitingly-unsolitary-jayson.ngrok-free.dev/api/chat", {
+      const endCheckResponse = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -411,7 +412,7 @@ Who should respond? ${aiCharacters[0].name} (${aiCharacters[0].role}) or ${aiCha
 
 Respond with just: "1", "2", or "both"`;
 
-      const whoResponse = await fetch("https://excitingly-unsolitary-jayson.ngrok-free.dev/api/chat", {
+      const whoResponse = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -509,7 +510,7 @@ RULES:
 - Never break the fourth wall
 - Favor survival and caution`;
 
-  const response = await fetch("https://excitingly-unsolitary-jayson.ngrok-free.dev/api/chat", {
+  const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -561,7 +562,7 @@ async function act4_GoldenHall(scene, playerCharacter, aiCharacters, campaignDat
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
     
-    const response = await fetch("https://excitingly-unsolitary-jayson.ngrok-free.dev/api/chat", {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -640,7 +641,7 @@ async function act5_ThroneRoom(scene, playerCharacter, aiCharacters, campaignDat
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
     
-    const response = await fetch("https://excitingly-unsolitary-jayson.ngrok-free.dev/api/chat", {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -778,7 +779,7 @@ async function continueWithCharacter(scene, character) {
       
       try {
         // Call the ollama API
-        const response = await fetch("https://excitingly-unsolitary-jayson.ngrok-free.dev/api/chat", {
+        const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"

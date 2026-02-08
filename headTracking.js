@@ -171,11 +171,6 @@ export class FaceTracker {
         if (headPose && this.onHeadPoseUpdate) {
           this.onHeadPoseUpdate(headPose);
         }
-      } else {
-        // Log when no face is detected (but not too frequently)
-        if (Math.random() < 0.01) { // Log ~1% of the time
-          console.log('No face detected in current frame');
-        }
       }
     }
 
@@ -196,7 +191,103 @@ export class FaceTracker {
   }
 }
 
-// Convert head pose to camera position
+// Off-Axis Camera implementation
+// Based on off-axis-sneaker repository implementation
+export class OffAxisCamera {
+  constructor(camera, options = {}) {
+    this.camera = camera;
+    
+    // Physical calibration (in world units - adjusted for your scene scale)
+    this.screenWidthWorld = options.screenWidthWorld || 60;
+    this.screenHeightWorld = options.screenHeightWorld || 33.75; // 16:9 aspect ratio
+    this.viewingDistanceWorld = options.viewingDistanceWorld || 70;
+    
+    // Base position offsets (to move camera without affecting head tracking)
+    this.baseXOffset = options.baseXOffset || 0;
+    this.baseYOffset = options.baseYOffset || 0;
+    
+    // Near and far planes
+    this.nearPlane = 0.1;
+    this.farPlane = 1000;
+    
+    // Movement sensitivity
+    this.movementScale = options.movementScale || 1.5;
+    this.depthScale = options.depthScale || 1.0;
+  }
+  
+  headPoseToWorldPosition(headPose) {
+    // Convert normalized head pose to world coordinates
+    const normalizedX = headPose.x;
+    const normalizedY = headPose.y;
+    
+    // Invert X and Y for natural movement
+    const headXWorld = -(normalizedX - 0.5) * this.screenWidthWorld * this.movementScale + this.baseXOffset;
+    const headYWorld = -(normalizedY - 0.5) * this.screenHeightWorld * this.movementScale + this.baseYOffset;
+    
+    // Map depth (z) to viewing distance
+    const depthProxy = 1.0 / headPose.z;
+    const headZWorld = this.viewingDistanceWorld * depthProxy * this.depthScale;
+    
+    return { x: headXWorld, y: headYWorld, z: headZWorld };
+  }
+  
+  updateProjectionMatrix(headPosition) {
+    const near = this.nearPlane;
+    const far = this.farPlane;
+    
+    // Define screen bounds in world space (screen is at z=0)
+    const screenLeft = -this.screenWidthWorld / 2;
+    const screenRight = this.screenWidthWorld / 2;
+    const screenBottom = -this.screenHeightWorld / 2;
+    const screenTop = this.screenHeightWorld / 2;
+    
+    const eyeX = headPosition.x;
+    const eyeY = headPosition.y;
+    const eyeZ = headPosition.z;
+    
+    // Screen is at z=0
+    const screenZ = 0;
+    const viewerToScreenDistance = eyeZ - screenZ;
+    
+    // Prevent division by zero or negative distance
+    if (viewerToScreenDistance <= 0.1) {
+      return;
+    }
+    
+    // Calculate frustum based on eye position
+    // Scale by near plane distance
+    const n_over_d = near / viewerToScreenDistance;
+    
+    const left = (screenLeft - eyeX) * n_over_d;
+    const right = (screenRight - eyeX) * n_over_d;
+    const bottom = (screenBottom - eyeY) * n_over_d;
+    const top = (screenTop - eyeY) * n_over_d;
+    
+    // Update camera projection matrix with off-axis frustum
+    this.camera.projectionMatrix.makePerspective(left, right, top, bottom, near, far);
+    this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
+  }
+  
+  setCameraPosition(headPosition) {
+    // Position camera at viewer's eye position
+    this.camera.position.set(headPosition.x, headPosition.y, headPosition.z);
+    // Look at the dragon/boss area
+    this.camera.lookAt(0, 40, -80);
+  }
+  
+  updateFromHeadPose(headPose) {
+    // Convert head pose to world position
+    const worldPos = this.headPoseToWorldPosition(headPose);
+    
+    // Update camera position
+    this.setCameraPosition(worldPos);
+    
+    // Update projection matrix for off-axis effect
+    this.updateProjectionMatrix(worldPos);
+  }
+}
+
+// Convert head pose to camera position (legacy function for compatibility)
 // Based on off-axis-sneaker implementation
 export function headPoseToCamera(headPose, strengthX = 4, strengthY = 4, strengthZ = 2, baseZ = 100, baseY = 5) {
   // Invert X and Y for natural movement

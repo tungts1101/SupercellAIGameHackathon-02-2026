@@ -4,7 +4,8 @@ import { FBXLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/j
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
 import { EffectManager } from "./EffectManager.js";
 import { Boss } from "./Boss.js";
-import { FaceTracker, headPoseToCamera, getWebcamStream } from '../headTracking.js';
+import { FaceTracker, OffAxisCamera, headPoseToCamera, getWebcamStream } from '../headTracking.js';
+import { OLLAMA_BASE_URL } from '../config.js';
 
 // Character class for managing hero characters (Swordman, Archer, Magician)
 class Character {
@@ -518,7 +519,7 @@ ${gameState.context ? '\nContext: ' + gameState.context : ''}
 
 Respond with ONLY ONE ACTION from the allowed list. No explanation, just the action name.`;
 
-    const response = await fetch('https://excitingly-unsolitary-jayson.ngrok-free.dev/api/chat', {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -835,7 +836,7 @@ class TurnSystem {
     };
     
     // Ask Ollama for decision using gemma:7b
-    const response = await fetch('https://excitingly-unsolitary-jayson.ngrok-free.dev/api/chat', {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1169,7 +1170,7 @@ class TurnSystem {
   
   async dragonNarrativeVictory() {
     // Get narrative from llama3.1:8b
-    const response = await fetch('https://excitingly-unsolitary-jayson.ngrok-free.dev/api/chat', {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1845,20 +1846,32 @@ export async function run({ scene }) {
     0.1,
     1000
   );
-  perspectiveCamera.position.set(0, 5, 300); // Further and lower
+  perspectiveCamera.position.set(100, 10, 150); // Lower and further away
+  
+  // Create off-axis camera for proper head-coupled perspective
+  const offAxisCamera = new OffAxisCamera(perspectiveCamera, {
+    screenWidthWorld: 80,    // Adjust for your scene scale
+    screenHeightWorld: 45,   // 16:9 aspect ratio
+    viewingDistanceWorld: 120, // Base viewing distance
+    baseXOffset: 0,          // Base X position (centered)
+    baseYOffset: 10,         // Base Y position (camera height)
+    movementScale: 2.0,      // Sensitivity for lateral movement
+    depthScale: 1.5          // Sensitivity for depth movement
+  });
   
   // Setup head tracking
   let headTrackingEnabled = false;
   let currentHeadPose = null;
   
-  // Create webcam video element (hidden - no window shown to user)
+  // Create hidden webcam video element
   const video = document.createElement('video');
   video.width = 640;
   video.height = 480;
   video.autoplay = true;
   video.muted = true;
   video.playsInline = true;
-  video.style.display = 'none'; // Hidden from view
+  video.style.display = 'none'; // Hidden
+  video.style.transform = 'scaleX(-1)'; // Mirror horizontally for natural movement
   document.body.appendChild(video);
   
   // Initialize face tracker
@@ -1882,16 +1895,12 @@ export async function run({ scene }) {
     const initialized = await faceTracker.initialize();
     
     if (initialized) {
-      // Enable tracking FIRST
+      // Enable tracking
       headTrackingEnabled = true;
       
-      // Start tracking with callback - remove the headTrackingEnabled check inside
+      // Start tracking with callback
       await faceTracker.startTracking(video, (headPose) => {
         currentHeadPose = headPose;
-        // Log occasionally to verify it's working
-        if (Math.random() < 0.005) {
-          console.log('📍 Head pose:', headPose);
-        }
       });
       console.log('✅ Head tracking initialized and enabled');
       console.log('💡 Move your head to control the camera!');
@@ -1901,12 +1910,12 @@ export async function run({ scene }) {
     // Continue without head tracking - the game should still work
   }
   
-  // Add orbit controls for testing (disabled when head tracking is active)
+  // Add orbit controls for fallback (disabled when head tracking is active)
   const controls = new OrbitControls(perspectiveCamera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
-  controls.target.set(0, 60, 0); // Look slightly higher
-  controls.enabled = false; // Disable to allow head tracking control
+  controls.target.set(0, 40, -80);
+  controls.enabled = false;
   controls.update();
   
   // Add lighting for metallic dragon
@@ -1947,7 +1956,7 @@ export async function run({ scene }) {
   try {
     // Load the dragon boss
     const dragon = await boss.load('scene.gltf', './assets/tarisland_dragon/', loadingMessage);
-    dragon.position.set(0, 0, 0); // Ground level
+    dragon.position.set(0, 0, -80); // Further from camera
     dragon.scale.set(2, 2, 2);
     
     // Log bounding box to see model size
@@ -2084,9 +2093,9 @@ export async function run({ scene }) {
     
     // Character positions: left (-50), middle (0), right (50)
     const positions = [
-      { x: -50, z: 30 },  // Left - closer to dragon
-      { x: 0, z: 40 },    // Middle - closer to dragon
-      { x: 50, z: 30 }    // Right - closer to dragon
+      { x: -50, z: -70 },  // Left - further from camera
+      { x: 0, z: -60 },    // Middle - further from camera
+      { x: 50, z: -70 }    // Right - further from camera
     ];
     
     // Create selected character first at middle position
@@ -2301,11 +2310,10 @@ export async function run({ scene }) {
       
       const delta = clock.getDelta();
       
-      // Update camera position based on head tracking
+      // Update camera position and projection matrix based on head tracking
       if (headTrackingEnabled && currentHeadPose) {
-        const newPos = headPoseToCamera(currentHeadPose, 4, 4, 2, 100, 20); // Pass baseY=5
-        perspectiveCamera.position.set(newPos.x, newPos.y, newPos.z);
-        perspectiveCamera.lookAt(0, 60, 0); // Look higher to see dragon flight
+        // Use OffAxisCamera for proper head-coupled perspective
+        offAxisCamera.updateFromHeadPose(currentHeadPose);
       } else {
         // Only update orbit controls when head tracking is not active
         controls.update();
