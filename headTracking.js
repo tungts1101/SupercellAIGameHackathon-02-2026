@@ -151,6 +151,11 @@ export class FaceTracker {
         if (headPose && this.onHeadPoseUpdate) {
           this.onHeadPoseUpdate(headPose);
         }
+      } else {
+        // Log when no face is detected (but not too frequently)
+        if (Math.random() < 0.01) { // Log ~1% of the time
+          console.log('No face detected in current frame');
+        }
       }
     }
 

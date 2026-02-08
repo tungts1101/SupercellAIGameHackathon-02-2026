@@ -1849,36 +1849,55 @@ export async function run({ scene }) {
   let headTrackingEnabled = false;
   let currentHeadPose = null;
   
-  // Create webcam video element (hidden)
+  // Create webcam video element (visible for debugging)
   const video = document.createElement('video');
   video.width = 320;
   video.height = 240;
   video.autoplay = true;
-  video.style.display = 'none'; // Hidden from view
+  video.muted = true;
+  video.playsInline = true;
+  // Make video visible in bottom-right corner for debugging
+  video.style.position = 'fixed';
+  video.style.bottom = '20px';
+  video.style.right = '20px';
+  video.style.width = '320px';
+  video.style.height = '240px';
+  video.style.border = '2px solid lime';
+  video.style.borderRadius = '10px';
+  video.style.zIndex = '10000';
+  video.style.transform = 'scaleX(-1)'; // Mirror for natural viewing
   document.body.appendChild(video);
   
   // Initialize face tracker
   const faceTracker = new FaceTracker();
   
   try {
+    console.log('🎥 Starting webcam initialization...');
     // Use the new getWebcamStream utility for better Windows compatibility
     await getWebcamStream(video, { width: 640, height: 480, facingMode: 'user' });
+    console.log('✓ Webcam stream active, video playing:', !video.paused);
     
     // Initialize the face landmarker
+    console.log('🤖 Initializing face landmarker...');
     const initialized = await faceTracker.initialize();
     
     if (initialized) {
+      // Enable tracking BEFORE starting the callback
+      headTrackingEnabled = true;
+      
       // Start tracking with callback
       await faceTracker.startTracking(video, (headPose) => {
-        if (headTrackingEnabled) {
-          currentHeadPose = headPose;
+        currentHeadPose = headPose;
+        // Log occasionally to verify it's working
+        if (Math.random() < 0.01) {
+          console.log('📍 Head pose updated:', headPose);
         }
       });
-      headTrackingEnabled = true;
       console.log('✅ Head tracking initialized and enabled');
+      console.log('💡 Move your head to control the camera!');
     }
   } catch (err) {
-    console.warn('⚠️ Could not initialize head tracking:', err.message || err);
+    console.error('❌ Could not initialize head tracking:', err.message || err);
     // Continue without head tracking - the game should still work
   }
   
