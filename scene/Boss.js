@@ -14,8 +14,8 @@ export class Boss {
     this.combatSystem = null; // Will be set later
     
     // Combat stats
-    this.maxHealth = 10;
-    this.health = 10;
+    this.maxHealth = 300;
+    this.health = 300;
     this.isDead = false;
     
     // UI elements
