@@ -1,3 +1,5 @@
+import { voiceService } from '../voice-service.js';
+
 export async function run({ scene }) {
   // ACT 1: Opening Narrative
   await act1_OpeningNarrative(scene);
@@ -29,13 +31,17 @@ async function act1_OpeningNarrative(scene) {
   // Store for later acts
   window.campaignData = campaignData;
   
-  // Generate initial narrative using deepseek-r1:8b
+  // Use fake narrative for fast testing instead of AI call
   scene.showThinking();
   
   let narrative = null;
   
-  try {
-    const controller = new AbortController();
+  // FAKE NARRATIVE MODE - skip AI call for fast testing
+  const useFakeNarrative = false;
+  
+  if (!useFakeNarrative) {
+    try {
+      const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
     
     // Add random variation to the prompt
@@ -103,42 +109,22 @@ IMPORTANT: End by telling the player they must choose which companion's perspect
     
     console.log("Narrative after processing:", narrative);
     
-  } catch (error) {
-    console.error("Error generating narrative:", error);
-    console.log("Using fallback narrative from campaign data");
+    } catch (error) {
+      console.error("Error generating narrative:", error);
+      console.log("Using fallback narrative from campaign data");
+    }
   }
   
-  // Fallback narrative if AI fails - with some variation
-  if (!narrative || narrative.length < 100) {
-    const fallbacks = [
-      `The roads have grown quieter with each passing mile. Not the quiet of peace, but the silence of abandonment. Villages stand half-empty, their markets barren. Guards sit unpaid at their posts, watching caravans that no longer come. Merchants speak in hushed tones of wealth that vanishes into the mountains, never to return.
-
-The Black Keep rises before you like a jagged tooth against the darkening sky. Once a fortress of power, it has become something else entirely—a vault that breathes in gold and exhales nothing. The very stones seem to bend under an invisible weight. The air grows colder as you approach, not from winter's bite, but from the absence of life, of motion, of hope.`,
-
-      `Gold flows upward like water seeking its source. From every town, every market, every hidden purse—all of it drawn toward the mountains by an invisible current. The Black Keep stands at the apex of this terrible tide, swallowing wealth and giving nothing in return. Trade routes lie empty. Guardhouses stand unmanned. The world is being bled dry without a single drop of blood.
-
-You have traveled through this dying land, witnessing the slow suffocation firsthand. Each village more desperate than the last. Each road more dangerous. The dragon Avarrax has conquered without conquest, claimed without claiming. His hoard has become gravity itself.`,
-
-      `They say the Black Keep was once a seat of power. Now it is a tomb of riches. Mountains of gold fill halls that once rang with footsteps. The fortress stands intact, but hollow—a shell that exists only to contain the dragon's endless avarice. Every coin that enters those walls is lost to the world forever.
-
-The journey here has shown you the truth: this is not a war of fire and blood, but of starvation and silence. Cities crumble for want of coin. Armies dissolve for lack of pay. All wealth flows toward Avarrax, and he gives nothing back.`
-    ];
+  // Use fake narrative or fallback narrative if AI fails
+  if (useFakeNarrative || !narrative || narrative.length < 100) {
+    console.log("Using fake narrative for testing");
     
-    const randomFallback = fallbacks[Math.floor(Math.random() * fallbacks.length)];
-    
-    narrative = `${randomFallback}
+    // Short fake narrative for fast testing
+    narrative = `The Black Keep looms before you, a fortress of greed where the dragon Avarrax hoards endless wealth. Three companions stand ready to face this threat with you.
 
-${campaignData.campaign.story_overview.premise}
+Choose your perspective: ${campaignData.party.swordsman.name} the warrior, ${campaignData.party.archer.name} the archer, or ${campaignData.party.magician.name} the mage. Who will you be?`;
 
-You are not alone in this undertaking. Three companions have joined you on this grim pilgrimage, each driven by their own reasons to confront what dwells within:
-
-${campaignData.party.swordsman.name}, the ${campaignData.party.swordsman.class}—a ${campaignData.party.swordsman.role}. His blade has seen countless battles, and his eyes carry the weight of every fallen comrade.
-
-${campaignData.party.archer.name}, the ${campaignData.party.archer.class}—${campaignData.party.archer.role}. Her arrows fly true, and her patience is matched only by her determination to see justice done.
-
-${campaignData.party.magician.name}, the ${campaignData.party.magician.class}—wielding ${campaignData.party.magician.role}. Ancient knowledge flows through her, a counterpoint to the raw greed that corrupts this place.
-
-The choice before you is not which path to take, but which eyes to see it through. Choose your perspective—for in the Black Keep, every soul will be tested, and every truth comes with a price.`;
+    console.log("Short fake narrative ready");
   }
   
   // Split narrative into chunks (max 400 characters per dialogue)
@@ -245,12 +231,19 @@ function splitIntoChunks(text, maxLength) {
 async function showNarrativeChunks(scene, chunks) {
   for (let i = 0; i < chunks.length; i++) {
     await new Promise(resolve => {
-      scene.say(chunks[i], resolve);
+      scene.say(chunks[i], resolve, 'storyteller');
     });
   }
 }
 
 async function act3_Conversation(scene, playerCharacter, aiCharacters, campaignData) {
+  // Store character data globally for highlighting system
+  window.playerCharacter = playerCharacter;
+  window.playerCharacterName = playerCharacter.name.toLowerCase();
+  window.aiCharacters = aiCharacters;
+  
+  console.log(`🎯 Character assignment: Player="${playerCharacter.name}", AI1="${aiCharacters[0].name}", AI2="${aiCharacters[1].name}"`);
+  
   // Hide storyteller, show player character on left
   scene.hideCharacter("storyteller");
   
@@ -304,15 +297,51 @@ async function act3_Conversation(scene, playerCharacter, aiCharacters, campaignD
 
   // Show initial dialogue and wait for user to continue before enabling input
   await new Promise(resolve => {
-    scene.say(`You are ${playerCharacter.name}. ${aiCharacters[0].name} and ${aiCharacters[1].name} stand with you. What do you say?`, resolve);
+    scene.say(`You are ${playerCharacter.name}. ${aiCharacters[0].name} and ${aiCharacters[1].name} stand with you. What do you say?`, resolve, 'storyteller', false); // Disable voice
   });
+
+  // Set up conversation continuation backup
+  window.continueConversation = async (userInput) => {
+    console.log('🔄 Backup conversation continuation with:', userInput);
+    
+    try {
+      // Generate simple AI responses
+      const aiCharacters = ['elric', 'seraphine'];
+      const character = aiCharacters[Math.floor(Math.random() * aiCharacters.length)];
+      
+      const responses = [
+        "I see your point. What do you suggest we do?",
+        "That's concerning. We should remain vigilant.",
+        "Agreed. Let's proceed with caution.",
+        "I sense the same thing. We must stay alert."
+      ];
+      
+      const response = responses[Math.floor(Math.random() * responses.length)];
+      
+      await new Promise(resolve => {
+        scene.say(response, resolve, character);
+      });
+      
+      // Continue conversation loop
+      setTimeout(() => {
+        scene.showConversationInput(window.continueConversation);
+      }, 500);
+      
+    } catch (error) {
+      console.error('Error in backup conversation:', error);
+    }
+  };
 
   // Enable conversation input after user has read the initial message
   handleConversationLoop(scene, playerCharacter, aiCharacters, campaignData);
 }
 
 function handleConversationLoop(scene, playerCharacter, aiCharacters, campaignData) {
-  scene.showConversationInput(async (userInput) => {
+  console.log('🎯 Registering scene conversation handler');
+  
+  // Register this conversation handler globally so speech recognition can use it
+  window.activeSceneConversationHandler = async (userInput) => {
+    console.log('🎭 Scene conversation handler triggered with:', userInput);
     // Show thinking while processing
     scene.showThinking();
     
@@ -344,7 +373,7 @@ Respond with only: "yes" or "no"`;
 
       if (shouldEnd) {
         // End conversation and proceed to Act 4
-        scene.say("The party steels themselves and steps forward into the Black Keep...");
+        scene.say("The party steels themselves and steps forward into the Black Keep...", null, 'storyteller');
         await new Promise(resolve => setTimeout(resolve, 2000));
         await act4_GoldenHall(scene, playerCharacter, aiCharacters, campaignData);
         return;
@@ -390,11 +419,15 @@ Respond with just: "1", "2", or "both"`;
 
       // Display responses
       for (const resp of responses) {
-        // Highlight speaking character
-        scene.highlightCharacter(resp.index === 0 ? "ai1" : "ai2");
-        scene.say(`${resp.character.name}: ${resp.text}`);
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        scene.resetHighlight();
+        const characterName = resp.character.name.toLowerCase();
+        await new Promise(resolve => {
+          scene.say(`${resp.character.name}: ${resp.text}`, () => {
+            // Character finished talking - handle highlight
+            scene.onCharacterFinishedTalking(characterName);
+            resolve();
+          }, characterName);
+        });
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
       // Show input again for next message
@@ -404,12 +437,15 @@ Respond with just: "1", "2", or "both"`;
       
     } catch (error) {
       console.error("Error in conversation:", error);
-      scene.say("The conversation pauses for a moment..." );
+      scene.say("The conversation pauses for a moment...", null, 'storyteller');
       setTimeout(() => {
         handleConversationLoop(scene, playerCharacter, aiCharacters, campaignData);
       }, 2000);
     }
-  });
+  };
+  
+  // Call showConversationInput with the registered handler
+  scene.showConversationInput(window.activeSceneConversationHandler);
 }
 
 async function generateCharacterResponse(character, playerCharacter, userInput, campaignData) {
@@ -648,11 +684,12 @@ And then—slowly, inevitably—the dragon's eyes focus on you.`;
   
   // Store party data for next scene
   window.playerCharacter = playerCharacter;
+  window.playerCharacterName = playerCharacter.name.toLowerCase(); // Store name for highlighting
   window.aiCharacters = aiCharacters;
   
   // Prepare for 3D battle scene
   await new Promise(resolve => {
-    scene.say("...", resolve);
+    scene.say("...", resolve, 'storyteller');
   });
   
   // Transition to battle scene (scene_02)
@@ -672,7 +709,7 @@ async function continueWithCharacter(scene, character) {
     }
   );
 
-  scene.say(`You have chosen to play as ${character.name}. Your journey begins...`);
+  scene.say(`You have chosen to play as ${character.name}. Your journey begins...`, null, 'storyteller');
 
   setTimeout(() => {
     scene.showOptions(
@@ -739,11 +776,11 @@ async function continueWithCharacter(scene, character) {
         const aiResponse = data.message.content;
         
         // Display the AI response with typewriter effect
-        scene.say(aiResponse);
+        scene.say(aiResponse, null, 'storyteller');
         
       } catch (error) {
         console.error("Error calling ollama API:", error);
-        scene.say("Something went wrong. Please try again.");
+        scene.say("Something went wrong. Please try again.", null, 'storyteller');
       }
     }
   );

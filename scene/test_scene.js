@@ -255,32 +255,28 @@ export async function run({ scene }) {
     
     document.body.appendChild(dialogueBox);
     
-    // Type out the narrative
-    let currentChar = 0;
-    let typing = true;
-    const typeSpeed = 30;
+    // Type out the narrative with voice support
+    let dialogueController = null;
     
-    const typeInterval = setInterval(() => {
-      if (currentChar < narrative.length) {
-        textBox.textContent += narrative[currentChar];
-        currentChar++;
-      } else {
-        clearInterval(typeInterval);
-        typing = false;
+    dialogueController = renderDialogueWithVoice(
+      textBox,
+      narrative,
+      'boss', // Character speaking is the boss
+      30, // typeSpeed
+      () => {
         hintBox.textContent = 'Press TAB to continue...';
-      }
-    }, typeSpeed);
+      },
+      true // enableVoice
+    );
     
     // Wait for TAB key
     await new Promise(resolve => {
       const handleKey = (e) => {
         if (e.key === 'Tab') {
           e.preventDefault();
-          if (typing) {
-            // Skip typing
-            clearInterval(typeInterval);
-            textBox.textContent = narrative;
-            typing = false;
+          if (dialogueController && dialogueController.isPlaying()) {
+            // Fast-forward dialogue (stop voice and show full text)
+            dialogueController.stop();
             hintBox.textContent = 'Press TAB to continue...';
           } else {
             // Continue

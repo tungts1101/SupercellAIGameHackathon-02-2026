@@ -4,6 +4,7 @@ import { FBXLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/j
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
 import { EffectManager } from "./EffectManager.js";
 import { Boss } from "./Boss.js";
+import { voiceService, renderDialogueWithVoice } from '../voice-service.js';
 
 // Character class for managing hero characters (Swordman, Archer, Magician)
 class Character {
@@ -1227,35 +1228,33 @@ class TurnSystem {
     
     document.body.appendChild(dialogueBox);
     
-    // Type out the narrative
-    let currentChar = 0;
-    let typing = true;
-    const typeSpeed = 30;
+    // Type out the narrative with voice support
+    let dialogueController = null;
+    let narrativeCompleted = false;
     
-    const typeInterval = setInterval(() => {
-      if (currentChar < narrative.length) {
-        textBox.textContent += narrative[currentChar];
-        currentChar++;
-      } else {
-        clearInterval(typeInterval);
-        typing = false;
+    dialogueController = renderDialogueWithVoice(
+      textBox,
+      narrative,
+      'boss', // Character speaking is the boss
+      30, // typeSpeed
+      () => {
+        narrativeCompleted = true;
         hintBox.textContent = 'Press TAB to continue...';
-      }
-    }, typeSpeed);
+      },
+      true // enableVoice
+    );
     
     // Wait for TAB key
     await new Promise(resolve => {
       const handleKey = (e) => {
         if (e.key === 'Tab') {
           e.preventDefault();
-          if (typing) {
-            // Skip typing
-            clearInterval(typeInterval);
-            textBox.textContent = narrative;
-            typing = false;
+          if (dialogueController && dialogueController.isPlaying()) {
+            // Fast-forward dialogue (stop voice and show full text)
+            dialogueController.stop();
             hintBox.textContent = 'Press TAB to continue...';
           } else {
-            // Continue
+            // Continue to next scene
             window.removeEventListener('keydown', handleKey);
             resolve();
           }

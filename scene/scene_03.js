@@ -1,3 +1,5 @@
+import { voiceService } from '../voice-service.js';
+
 // Scene 03 - Storyteller ending scene
 export async function run({ scene, result = 'LOSE' }) {
   console.log("Scene 03: Epilogue - Result:", result);
@@ -73,15 +75,15 @@ export async function run({ scene, result = 'LOSE' }) {
 
   // Show AI-generated epilogue narrative
   await new Promise(resolve => {
-    scene.say(narrative, resolve);
+    scene.say(narrative, resolve, 'storyteller');
   });
   
   await new Promise(resolve => {
-    scene.say("Perhaps, in time, new heroes will emerge. But for now, the Black Keep stands as a monument to greed and the terrible price of gold.", resolve);
+    scene.say("Perhaps, in time, new heroes will emerge. But for now, the Black Keep stands as a monument to greed and the terrible price of gold.", resolve, 'storyteller');
   });
   
   await new Promise(resolve => {
-    scene.say("Thank you for experiencing this journey. May you carry its lessons forward.", resolve);
+    scene.say("Thank you for experiencing this journey. May you carry its lessons forward.", resolve, 'storyteller');
   });
   
   console.log("Scene 03 complete. Game ends.");

@@ -1,4 +1,5 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+import { voiceService, renderDialogueWithVoice, stopAllVoice } from "./voice-service.js";
 
 export async function getCampaignData() {
   if (!window.campaignData) {
@@ -145,7 +146,13 @@ export function createScene() {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
-
+  // Handle key release events for speech recognition
+  window.addEventListener("keyup", (e) => {
+    // Left Shift release - stop speech recognition
+    if (e.key === "Shift" && e.location === KeyboardEvent.DOM_KEY_LOCATION_LEFT && isRecording) {
+      stopSpeechRecognition();
+    }
+  });
   /* =========================
      UI LAYER — DIALOGUE
   ========================= */
@@ -245,29 +252,328 @@ export function createScene() {
   let thinkingDots = 0;
   let waitingForContinue = false;
   let continueCallback = null;
+  let currentDialogueController = null;
+  let currentCharacterSpeaking = null;
+  let instructionsShownOnce = false; // Track if conversation instructions have been shown
 
-  function say(text, onComplete) {
+  // Speech recognition variables
+  let speechRecognition = null;
+  let isRecording = false;
+  let recordingStartTime = 0;
+  let isTypingMode = false; // Track if typing input is active
+  const recordingIndicator = document.createElement('div');
+  
+  // Initialize speech recognition
+  if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    speechRecognition = new SpeechRecognition();
+    speechRecognition.continuous = true;
+    speechRecognition.interimResults = true;
+    speechRecognition.lang = 'en-US';
+    console.log('✅ Speech recognition available');
+    
+    // Test microphone permissions
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(() => {
+        console.log('✅ Microphone permission granted');
+      })
+      .catch((error) => {
+        console.warn('❌ Microphone permission denied:', error);
+        console.log('💡 Please allow microphone access for speech recognition to work');
+      });
+  } else {
+    console.warn('❌ Speech recognition not supported in this browser');
+    console.log('💡 Try Chrome, Edge, or Safari for speech recognition support');
+  }
+  
+  // Setup recording indicator
+  recordingIndicator.style.position = 'absolute';
+  recordingIndicator.style.top = '20px';
+  recordingIndicator.style.right = '20px';
+  recordingIndicator.style.padding = '10px 20px';
+  recordingIndicator.style.background = 'rgba(255, 0, 0, 0.8)';
+  recordingIndicator.style.color = 'white';
+  recordingIndicator.style.borderRadius = '25px';
+  recordingIndicator.style.fontFamily = 'serif';
+  recordingIndicator.style.fontSize = '16px';
+  recordingIndicator.style.fontWeight = 'bold';
+  recordingIndicator.style.display = 'none';
+  recordingIndicator.style.zIndex = '1000';
+  recordingIndicator.innerHTML = '🎤 Recording...';
+  uiLayer.appendChild(recordingIndicator);
+
+  /* =========================
+     DIALOGUE QUEUE SYSTEM
+  ========================= */
+  let dialogueQueue = [];
+  let isCurrentlySpeaking = false;
+
+  function processDialogueQueue() {
+    console.log(`🔍 Checking dialogue queue: ${dialogueQueue.length} items, currently speaking: ${isCurrentlySpeaking}`);
+    
+    // Double-check to prevent race conditions
+    if (isCurrentlySpeaking) {
+      console.log('⏳ Someone is currently speaking, queue processing paused');
+      return;
+    }
+    
+    if (dialogueQueue.length === 0) {
+      console.log('📭 Queue is empty, nothing to process');
+      return;
+    }
+
+    console.log(`🎭 Processing dialogue queue (${dialogueQueue.length} items)`);
+    
+    // Set speaking state IMMEDIATELY before doing anything else
+    isCurrentlySpeaking = true;
+    
+    const nextDialogue = dialogueQueue.shift();
+    console.log(`🔒 Locked speaking state for "${nextDialogue.character}"`);
+    console.log(`▶️ Starting dialogue for "${nextDialogue.character}"`);
+
+    // Execute the dialogue with correct parameter order
+    executeSay(
+      nextDialogue.text,        // First parameter: text
+      () => {                   // Second parameter: onComplete callback
+        console.log(`✅ Character "${nextDialogue.character}" finished speaking`);
+        
+        // Call the original callback first
+        if (nextDialogue.onComplete) {
+          nextDialogue.onComplete();
+        }
+        
+        // Mark as finished and process next
+        isCurrentlySpeaking = false;
+        console.log(`🔓 Unlocked speaking state after "${nextDialogue.character}"`);
+        
+        // Small delay to ensure proper sequencing
+        setTimeout(() => {
+          console.log(`🔄 Ready for next dialogue in queue`);
+          processDialogueQueue();
+        }, 300); // Increased delay to prevent race conditions
+      }, 
+      nextDialogue.character,   // Third parameter: character
+      nextDialogue.enableVoice, // Fourth parameter: enableVoice
+      nextDialogue.clearPrevious // Fifth parameter: clearPrevious
+    );
+  }
+
+  function say(text, onComplete, character = 'storyteller', enableVoice = true, clearPrevious = true) {
+    console.log(`🎬 DIALOGUE QUEUED: Character "${character}" wants to speak`);
+    console.log(`📝 Text preview: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
+    
+    // Storyteller narratives bypass the queue system (immediate execution)
+    if (character === 'storyteller') {
+      console.log(`📖 Storyteller narrative - bypassing queue, executing immediately`);
+      // Reset speaking state for scene transitions
+      isCurrentlySpeaking = false;
+      executeSay(text, onComplete, character, enableVoice, clearPrevious);
+      return;
+    }
+    
+    // Add conversation dialogues to queue
+    dialogueQueue.push({
+      text,
+      onComplete,
+      character,
+      enableVoice,
+      clearPrevious
+    });
+
+    console.log(`📋 Queue length: ${dialogueQueue.length}, Currently speaking: ${isCurrentlySpeaking}`);
+    
+    // Start processing if not already speaking
+    if (!isCurrentlySpeaking) {
+      // Use a small delay to batch multiple rapid calls
+      setTimeout(() => processDialogueQueue(), 50);
+    } else {
+      console.log('⏳ Speech in progress, dialogue queued for later processing');
+    }
+    
+    // Force process if queue seems stuck (backup mechanism)
+    if (dialogueQueue.length > 0 && !isCurrentlySpeaking) {
+      console.log('🔄 Force-processing queue to prevent stalling');
+      setTimeout(() => processDialogueQueue(), 200);
+    }
+  }
+
+  function clearDialogueQueue() {
+    console.log(`🧹 Clearing dialogue queue (had ${dialogueQueue.length} items)`);
+    dialogueQueue = [];
+    isCurrentlySpeaking = false;
+  }
+
+  function resetSceneState() {
+    console.log('🎬 Resetting scene state for transition');
+    clearDialogueQueue();
+    conversationCallback = null;
+    currentCharacterSpeaking = null;
+    typing = false;
+    waitingForContinue = false;
+    continueCallback = null;
+    isCurrentlySpeaking = false; // Reset speaking state
+    instructionsShownOnce = false; // Reset instructions flag for new scene
+    console.log('✅ Scene state reset complete');
+  }
+
+  function executeSay(text, onComplete, character = 'storyteller', enableVoice = true, clearPrevious = true) {
+    console.log(`🎬 NARRATIVE START: Character "${character}" is now speaking`);
+    console.log(`🔊 Voice enabled: ${enableVoice}`);
+    
     clearInterval(timer);
     thinking = false;
+    
+    // Stop any existing voice immediately
+    if (window.voiceService) {
+      window.voiceService.stopVoice();
+    }
+    if ('speechSynthesis' in window) {
+      speechSynthesis.cancel();
+    }
+    
     fullText = text;
     index = 0;
     typing = true;
     waitingForContinue = false;
     continueCallback = onComplete; // Set callback immediately
-    textBox.textContent = "";
+    const previousCharacter = currentCharacterSpeaking;
+    currentCharacterSpeaking = character;
+    
+    console.log(`🎭 Character speaking: ${character} (previous: ${previousCharacter})`);
+    console.log(`🎪 Conversation state - conversationCallback:`, !!conversationCallback);
+    console.log(`🎪 Conversation input visible:`, conversationInputBox && conversationInputBox.style.display !== 'none');
+    
+    // Handle character highlighting during conversations
+    // We're in a conversation if:
+    // 1. conversationCallback exists OR
+    // 2. Player character name is set (indicating character interaction) OR
+    // 3. Current character is not storyteller (character dialogue/interaction)
+    const isInConversation = conversationCallback || window.playerCharacterName || 
+                           (character && character !== 'storyteller');
+    
+    console.log(`🎪 Is in conversation:`, isInConversation, 
+               `(callback: ${!!conversationCallback}, player: ${!!window.playerCharacterName}, char: ${character})`);
+    
+    if (isInConversation) {
+      console.log(`🎭 Conversation highlighting: ${character} speaking (previous: ${previousCharacter})`);
+      console.log(`📋 Dialogue queue length: ${dialogueQueue.length}`);
+      console.log(`🎮 Player character: ${window.playerCharacterName}`);
+      console.log(`🤖 AI characters:`, window.aiCharacters?.map(c => c.name) || 'Not set');
+      
+      // Always keep player character highlighted (never dim)
+      // Player-selected character ALWAYS uses 'player' mesh regardless of character name
+      const playerMeshId = 'player';
+      if (characterMeshes[playerMeshId]) {
+        const mesh = characterMeshes[playerMeshId];
+        if (mesh && mesh.material) {
+          mesh.material.transparent = true;
+          mesh.material.opacity = 1.0;
+          mesh.material.needsUpdate = true;
+          const flipSign = Math.sign(mesh.scale.x) || 1;
+          mesh.scale.set(1.15 * flipSign, 1.15, 1);
+          console.log(`👤 Player (${playerMeshId}) always highlighted`);
+        }
+      }
+      
+      // Handle AI character highlighting
+      ["ai1", "ai2"].forEach((meshId, index) => {
+        if (meshId === playerMeshId) return; // Skip player mesh
+        
+        const mesh = characterMeshes[meshId];
+        if (mesh && mesh.material) {
+          // Get AI character name from stored selection order (no hardcoded fallback)
+          const aiCharacter = window.aiCharacters && window.aiCharacters[index] ? 
+                             window.aiCharacters[index].name.toLowerCase() : 
+                             null; // No fallback - should always use dynamic assignment
+          
+          if (!aiCharacter) {
+            console.warn(`⚠️ No AI character found for ${meshId} at index ${index}. Available AI characters:`, window.aiCharacters);
+            return;
+          }
+          
+          const speakingCharacter = character.toLowerCase();
+          console.log(`🔍 Checking ${meshId}: aiCharacter="${aiCharacter}", speakingCharacter="${speakingCharacter}"`);
+          
+          if (aiCharacter === speakingCharacter) {
+            // This AI is speaking - highlight them
+            mesh.material.transparent = true;
+            mesh.material.opacity = 1.0;
+            mesh.material.needsUpdate = true;
+            const flipSign = Math.sign(mesh.scale.x) || 1;
+            mesh.scale.set(1.15 * flipSign, 1.15, 1);
+            console.log(`✨ AI ${aiCharacter} (${meshId}) highlighted - speaking`);
+          }
+          // Don't automatically dim other AI characters - they keep their current state
+        }
+      });
+    }
+    
+    // Only clear text box if explicitly requested or if it's a major scene change
+    if (clearPrevious || !previousCharacter || previousCharacter === 'storyteller' || character === 'storyteller') {
+      textBox.textContent = "";
+    } else {
+      // During conversations, append a new line and separator for clarity
+      if (textBox.textContent.trim()) {
+        textBox.textContent += "\n\n";
+      }
+    }
+    
     textBox.style.display = "block";
     optionsBox.style.display = "none";
     optionsVisible = false;
 
-    timer = setInterval(() => {
-      if (index < fullText.length) {
-        textBox.textContent += fullText[index++];
+    // Stop any existing dialogue controller when character changes
+    if (currentDialogueController) {
+      if (previousCharacter !== character) {
+        console.log(`🔄 Character changed: ${previousCharacter} -> ${character}, stopping previous voice`);
+        currentDialogueController.stop();
+        // Force stop voice to ensure new character voice starts
+        voiceService.stop();
       } else {
-        clearInterval(timer);
-        typing = false;
-        waitingForContinue = true;
+        console.log(`🔄 Same character continuing: ${character}`);
+        // Same character - just clear the controller without stopping voice
+        currentDialogueController = null;
       }
-    }, 30);
+    } else {
+      console.log(`🎬 Starting dialogue for character: ${character}`);
+    }
+
+    // Use voice-enabled dialogue rendering
+    currentDialogueController = renderDialogueWithVoice(
+      textBox,
+      text,
+      character,
+      30, // typeSpeed
+      () => {
+        typing = false;
+        currentDialogueController = null;
+        
+        // IMPORTANT: Call the onComplete callback to reset dialogue queue state
+        if (onComplete) {
+          console.log('🔔 Calling onComplete callback to reset speaking state');
+          onComplete();
+        }
+        
+        // During conversations, automatically show input options when text finishes
+        if (conversationCallback || (currentCharacterSpeaking && currentCharacterSpeaking !== 'storyteller')) {
+          console.log('💬 Conversation text finished, showing input options automatically');
+          waitingForContinue = false; // Don't wait for TAB during conversations
+          
+          // Only show input if we have a callback (waiting for user input)
+          // Otherwise just finish rendering (for character-to-character dialogue)
+          if (conversationCallback) {
+            console.log('👤 Ready for user input - showing conversation interface');
+            showConversationInput(conversationCallback);
+          } else {
+            console.log('🗣️ Character finished speaking - waiting for next character or user input');
+          }
+        } else {
+          waitingForContinue = true; // Normal narrative mode - wait for TAB
+        }
+      },
+      enableVoice,
+      clearPrevious // Pass the clear previous flag
+    );
   }
 
   function showThinking() {
@@ -308,9 +614,118 @@ export function createScene() {
 
   // Keyboard listener for all interactions
   window.addEventListener("keydown", (e) => {
+    // PRIORITY 0: Speech Recognition (LEFT SHIFT key) and Typing (RIGHT SHIFT key)
+    if (e.key === "Shift" && e.location === 1) { // Left Shift only (location 1)
+      e.preventDefault();
+      console.log(`🔑 LEFT SHIFT pressed. typingMode: ${isTypingMode}, conversationCallback: ${!!conversationCallback}, isRecording: ${isRecording}`);
+      
+      // Don't do speech recognition if in typing mode
+      if (isTypingMode) {
+        console.log('❌ Speech recognition blocked - currently in typing mode');
+        return;
+      }
+      
+      // Don't allow interruption while AI character is speaking
+      if (isCurrentlySpeaking) {
+        console.log('❌ Speech recognition blocked - AI character is currently speaking. Wait for them to finish.');
+        return;
+      }
+      
+      // Check if we're in a conversation context (either formal callback or character dialogue)
+      const isInConversationContext = conversationCallback || 
+                                     (currentCharacterSpeaking && currentCharacterSpeaking !== 'storyteller') ||
+                                     (window.playerCharacterName); // After character selection
+      
+      if (isInConversationContext && !isRecording && speechRecognition) {
+        console.log('🎤 Starting speech recognition...');
+        
+        // If no formal callback, create a temporary one for speech processing
+        if (!conversationCallback) {
+          console.log('🔧 Creating temporary conversation callback for speech input');
+          conversationCallback = (response) => {
+            console.log('🗣️ Temporary callback received response:', response);
+            
+            // Ensure we're not marked as currently speaking before triggering scene handlers
+            console.log('🔄 Resetting speech state before triggering scene handler');
+            isCurrentlySpeaking = false;
+            
+            // Find and trigger the active scene's conversation handler
+            if (window.activeSceneConversationHandler) {
+              console.log('🎭 Triggering scene conversation handler with:', response);
+              window.activeSceneConversationHandler(response);
+            } else {
+              console.log('⚠️ No active scene conversation handler found - showing player response and continuing');
+              // Fallback: show the response as player dialogue, then trigger AI responses
+              say(response, () => {
+                console.log('👤 Player response completed - triggering AI conversation continuation');
+                // Try to continue the conversation by calling the scene's conversation system
+                if (window.continueConversation) {
+                  window.continueConversation(response);
+                } else {
+                  console.log('🤖 Manually triggering AI responses...');
+                  // Generate a simple AI response to continue conversation
+                  generateAIResponse(response);
+                }
+              }, window.playerCharacterName || 'player', true, false);
+            }
+          };
+        }
+        
+        startSpeechRecognition();
+      } else {
+        console.log('❌ Speech recognition not started:', {
+          inConversation: isInConversationContext,
+          notRecording: !isRecording,
+          hasSpeechRecognition: !!speechRecognition,
+          currentSpeaker: currentCharacterSpeaking
+        });
+      }
+      return;
+    }
+    
+    if (e.key === "Shift" && e.location === 2) { // Right Shift only (location 2)
+      e.preventDefault();
+      console.log(`🔑 RIGHT SHIFT pressed. conversationCallback: ${!!conversationCallback}`);
+      
+      // Stop any active speech recognition first
+      if (isRecording) {
+        console.log('🛑 Stopping speech recognition to switch to typing');
+        stopSpeechRecognition();
+      }
+      
+      // Don't allow interruption while AI character is speaking
+      if (isCurrentlySpeaking) {
+        console.log('❌ Typing input blocked - AI character is currently speaking. Wait for them to finish.');
+        return;
+      }
+      
+      // Check if we're in a conversation context
+      const isInConversationContext = conversationCallback || 
+                                     (currentCharacterSpeaking && currentCharacterSpeaking !== 'storyteller') ||
+                                     (window.playerCharacterName);
+      
+      if (isInConversationContext) {
+        console.log('⌨️ Starting typing input...');
+        
+        // If no formal callback, create a temporary one
+        if (!conversationCallback) {
+          console.log('🔧 Creating temporary conversation callback for typing input');
+          conversationCallback = (response) => {
+            console.log('⌨️ Temporary callback received typed response:', response);
+          };
+        }
+        
+        showActualConversationInput();
+      } else {
+        console.log('❌ Typing not available: not in conversation context');
+      }
+      return;
+    }
+    
     // PRIORITY 1: Character Selection (takes precedence over everything)
     if (selectingCharacter) {
       if (e.key === "Tab") {
+        console.log('🎯 TAB pressed during character selection');
         e.preventDefault();
         // Confirm selection
         selectingCharacter = false;
@@ -343,21 +758,59 @@ export function createScene() {
       return; // Don't process other keys during character selection
     }
 
-    // PRIORITY 2: TAB key - skip typing, continue narrative, or show options
+    // PRIORITY 2: TAB key - skip typing, continue narrative only
     if (e.key === "Tab") {
+      console.log('🎯 TAB pressed in main handler', {
+        typing, 
+        waitingForContinue, 
+        continueCallback: !!continueCallback,
+        selectingCharacter
+      });
       e.preventDefault();
       
       if (typing) {
-        // First press: Skip typing animation and show full text
-        clearInterval(timer);
-        textBox.textContent = fullText;
+        // Skip typing animation and show full text
+        if (currentDialogueController) {
+          currentDialogueController.stop();
+        } else {
+          clearInterval(timer);
+          textBox.textContent = fullText;
+        }
         typing = false;
+        
+        // During conversations, automatically continue and show input options
+        if ((conversationCallback || currentCharacterSpeaking && currentCharacterSpeaking !== 'storyteller')) {
+          console.log('🚀 Fast-forwarded conversation text, showing input options');
+          waitingForContinue = false;
+          
+          // Stop voice and reset speaking state when fast-forwarding
+          if (window.voiceService) {
+            window.voiceService.stopVoice();
+          }
+          isCurrentlySpeaking = false;
+          console.log('🔓 Reset speaking state after TAB fast-forward');
+          
+          // Only show input if we have a callback (waiting for user input)
+          if (conversationCallback) {
+            showConversationInput(conversationCallback);
+          }
+          return;
+        }
+        
         waitingForContinue = true;
+        console.log('📝 Skipped typing, ready for continue');
       } else if (waitingForContinue && continueCallback) {
-        // Second press: Continue to next step
+        // Continue to next step (only for non-conversation narrative)
+        if (conversationCallback || (currentCharacterSpeaking && currentCharacterSpeaking !== 'storyteller')) {
+          console.log('⚠️ TAB pressed during conversation - use LEFT/RIGHT SHIFT instead');
+          return; // Don't continue with TAB during conversations
+        }
+        
         waitingForContinue = false;
+        textBox.textContent = "";
         const callback = continueCallback;
         continueCallback = null;
+        console.log('➡️ Continuing to next dialogue');
         callback();
       } else if (pendingOptions && !optionsVisible) {
         // Show options after typing is complete - hide dialogue text
@@ -368,7 +821,15 @@ export function createScene() {
       return;
     }
 
-    // PRIORITY 3: Number keys - select option
+    // PRIORITY 3: Left Shift key - speech recognition during conversation
+    if (e.key === "Shift" && e.location === KeyboardEvent.DOM_KEY_LOCATION_LEFT && conversationCallback) {
+      if (!isRecording && speechRecognition) {
+        startSpeechRecognition();
+      }
+      return;
+    }
+
+    // PRIORITY 4: Number keys - select option
     if (!optionsVisible || !pendingOptions) return;
     
     const num = parseInt(e.key);
@@ -385,6 +846,18 @@ export function createScene() {
       
       if (optionCallback) {
         optionCallback(num - 1, selectedOption);
+      }
+    }
+  });
+  
+  // Separate keyup listener for LEFT SHIFT release
+  window.addEventListener("keyup", (e) => {
+    if (e.key === "Shift" && e.location === 1) { // Left Shift only
+      e.preventDefault();
+      console.log(`🔑 LEFT SHIFT released. isRecording: ${isRecording}`);
+      if (isRecording) {
+        console.log('🛑 Stopping speech recognition...');
+        stopSpeechRecognition();
       }
     }
   });
@@ -502,10 +975,55 @@ export function createScene() {
 
   function showConversationInput(callback) {
     conversationCallback = callback;
-    dialogue.style.display = "none";
+    
+    // Set conversation highlighting: player highlighted, AI characters dimmed, storyteller normal
+    ["ai1", "ai2"].forEach(meshId => {
+      const mesh = characterMeshes[meshId];
+      if (mesh && mesh.material) {
+        mesh.material.opacity = 0.4; // Dimmed for conversation
+        const flipSign = Math.sign(mesh.scale.x) || 1;
+        mesh.scale.set(1 * flipSign, 1, 1);
+      }
+    });
+    
+    // Reset storyteller to normal (not part of conversation)
+    const storytellerMesh = characterMeshes["storyteller"];
+    if (storytellerMesh && storytellerMesh.material) {
+      storytellerMesh.material.opacity = 0.8;
+      const flipSign = Math.sign(storytellerMesh.scale.x) || 1;
+      storytellerMesh.scale.set(1 * flipSign, 1, 1);
+    }
+    
+    // Ensure player character stays highlighted during conversation
+    if (window.playerCharacterName) {
+      highlightCharacter(window.playerCharacterName);
+      console.log(`💬 Starting conversation - player highlighted, others dimmed`);
+    }
+  }
+  
+  function showActualConversationInput() {
+    // Show the typing input box
     conversationInputBox.style.display = "flex";
-    conversationInput.value = "";
+    dialogue.style.display = "none";
     conversationInput.focus();
+    console.log('⌨️ Typing input box shown');
+  }
+  
+  function showActualConversationInput() {
+    // Ensure speech recognition is completely stopped
+    if (isRecording) {
+      stopSpeechRecognition();
+    }
+    
+    // Hide recording indicator if it's showing
+    recordingIndicator.style.display = 'none';
+    
+    // Show the typing input box and set typing mode
+    conversationInputBox.style.display = "flex";
+    dialogue.style.display = "none";
+    isTypingMode = true; // Enable typing mode
+    conversationInput.focus();
+    console.log('⌨️ Typing mode enabled - speech recognition blocked');
   }
 
   conversationInput.addEventListener("keydown", (e) => {
@@ -514,31 +1032,267 @@ export function createScene() {
       conversationInput.value = "";
       conversationInputBox.style.display = "none";
       dialogue.style.display = "block";
+      isTypingMode = false; // Disable typing mode
+      console.log('⌨️ Typing mode disabled');
       
       if (conversationCallback) {
-        conversationCallback(message);
+        const callback = conversationCallback;
+        conversationCallback = null; // Clear conversation state
+        
+        // Dim AI characters now that user has completed their input
+        ["ai1", "ai2"].forEach(meshId => {
+          const mesh = characterMeshes[meshId];
+          if (mesh && mesh.material) {
+            mesh.material.transparent = true;
+            mesh.material.opacity = 0.4;
+            mesh.material.needsUpdate = true;
+            const flipSign = Math.sign(mesh.scale.x) || 1;
+            mesh.scale.set(1 * flipSign, 1, 1);
+            console.log(`🔅 Dimmed AI ${meshId} - user completed input`);
+          }
+        });
+        
+        // Reset highlights when conversation ends
+        resetAllHighlights();
+        
+        callback(message);
       }
     }
   });
 
-  function highlightCharacter(id) {
-    const mesh = characterMeshes[id];
+  function highlightCharacter(characterId) {
+    console.log(`✨ Highlighting character: ${characterId}`);
+    console.log(`📊 Available meshes:`, Object.keys(characterMeshes));
+    console.log(`👤 Player character name:`, window.playerCharacterName);
+    
+    // Handle different character IDs - map character names to mesh IDs
+    let meshId = characterId;
+    if (characterId === 'storyteller') {
+      meshId = 'storyteller';
+    } else if (characterId === window.playerCharacterName || characterId === 'ronan') {
+      meshId = 'player';
+    } else if (window.aiCharacters) {
+      // Dynamic mapping based on character selection order
+      const ai1Character = window.aiCharacters[0] ? window.aiCharacters[0].name.toLowerCase() : 'elric';
+      const ai2Character = window.aiCharacters[1] ? window.aiCharacters[1].name.toLowerCase() : 'seraphine';
+      
+      if (characterId === ai1Character) {
+        meshId = 'ai1';
+      } else if (characterId === ai2Character) {
+        meshId = 'ai2';
+      } else {
+        meshId = 'ai1'; // Default fallback
+      }
+      console.log(`🗺️ Dynamic mapping: ${characterId} -> ${meshId} (ai1=${ai1Character}, ai2=${ai2Character})`);
+    } else if (characterId.includes('ai')) {
+      meshId = characterId;
+    } else {
+      console.warn(`⚠️ Unknown character ID: ${characterId}, checking available meshes...`);
+      // Try to find a matching mesh
+      const availableMeshIds = Object.keys(characterMeshes);
+      if (availableMeshIds.includes('ai1')) {
+        meshId = 'ai1';
+      } else if (availableMeshIds.includes('ai2')) {
+        meshId = 'ai2';
+      } else {
+        meshId = availableMeshIds[0] || 'ai1';
+      }
+    }
+    
+    console.log(`🗺️ Mapping ${characterId} -> ${meshId}`);
+    
+    const mesh = characterMeshes[meshId];
     if (mesh && mesh.material) {
+      const oldOpacity = mesh.material.opacity;
+      const oldScale = mesh.scale.x;
+      const wasTransparent = mesh.material.transparent;
+      
+      // Enable transparency and set opacity
+      mesh.material.transparent = true;
       mesh.material.opacity = 1.0;
+      mesh.material.needsUpdate = true; // Force material update
+      
+      // Set scale
       const flipSign = Math.sign(mesh.scale.x) || 1;
       mesh.scale.set(1.15 * flipSign, 1.15, 1);
+    } else {
+      console.error(`❌ Character mesh not found: ${meshId}`, {
+        meshExists: !!mesh,
+        materialExists: mesh && !!mesh.material,
+        availableMeshes: Object.keys(characterMeshes)
+      });
+    }
+  }
+  
+  function resetCharacterHighlight(characterId) {
+    console.log(`🛡️ Removing highlight from character: ${characterId}`);
+    
+    // Never reset player character highlight during conversations
+    if (conversationCallback && characterId === window.playerCharacterName) {
+      console.log(`👤 Keeping player character ${characterId} highlighted during conversation`);
+      return;
+    }
+    
+    // Handle different character IDs
+    let meshId = characterId;
+    if (characterId === 'storyteller') {
+      meshId = 'storyteller';
+    } else if (characterId === window.playerCharacterName) {
+      meshId = 'player';
+    } else {
+      // AI characters are usually ai1, ai2
+      meshId = characterId === 'elric' || characterId === 'seraphine' ? 'ai1' : 
+               characterId === 'ronan' ? 'player' :
+               characterId.includes('ai') ? characterId : 'ai1';
+    }
+    
+    const mesh = characterMeshes[meshId];
+    if (mesh && mesh.material) {
+      mesh.material.transparent = true;
+      mesh.material.opacity = 0.8;
+      mesh.material.needsUpdate = true;
+      const flipSign = Math.sign(mesh.scale.x) || 1;
+      mesh.scale.set(1 * flipSign, 1, 1);
+      console.log(`✅ Reset highlight for mesh: ${meshId}`);
+    }
+  }
+  
+  function dimCharacter(characterId) {
+    console.log(`🔅 Dimming character: ${characterId}`);
+    
+    // Never dim player character during conversations
+    if (conversationCallback && characterId === window.playerCharacterName) {
+      console.log(`👤 Keeping player character ${characterId} highlighted during conversation`);
+      return;
+    }
+    
+    // Handle different character IDs - map character names to mesh IDs
+    let meshId = characterId;
+    if (characterId === 'storyteller') {
+      meshId = 'storyteller';
+    } else if (characterId === window.playerCharacterName || characterId === 'ronan') {
+      meshId = 'player';
+    } else if (window.aiCharacters) {
+      // Dynamic mapping based on character selection order (same as highlightCharacter)
+      const ai1Character = window.aiCharacters[0] ? window.aiCharacters[0].name.toLowerCase() : 'elric';
+      const ai2Character = window.aiCharacters[1] ? window.aiCharacters[1].name.toLowerCase() : 'seraphine';
+      
+      if (characterId === ai1Character) {
+        meshId = 'ai1';
+      } else if (characterId === ai2Character) {
+        meshId = 'ai2';
+      } else {
+        meshId = 'ai1'; // Default fallback
+      }
+    } else if (characterId === 'elric' || characterId === 'seraphine') {
+      // Fallback for backwards compatibility
+      meshId = characterId === 'elric' ? 'ai1' : 'ai2';
+    } else if (characterId.includes('ai')) {
+      meshId = characterId;
+    } else {
+      console.warn(`⚠️ Unknown character ID: ${characterId}, defaulting to ai1`);
+      meshId = 'ai1';
+    }
+    
+    console.log(`🗺️ Mapping ${characterId} -> ${meshId}`);
+    
+    const mesh = characterMeshes[meshId];
+    if (mesh && mesh.material) {
+      // Enable transparency and set opacity
+      mesh.material.transparent = true;
+      mesh.material.opacity = 0.4; // Dimmed for conversations
+      mesh.material.needsUpdate = true; // Force material update
+      
+      const flipSign = Math.sign(mesh.scale.x) || 1;
+      mesh.scale.set(1 * flipSign, 1, 1);
+      mesh.highlighted = false; // Track highlighting state
+      console.log(`✅ Dimmed mesh: ${meshId} with opacity ${mesh.material.opacity}`);
+    } else {
+      console.error(`❌ Cannot dim mesh: ${meshId}`, {
+        meshExists: !!mesh,
+        materialExists: mesh && !!mesh.material
+      });
     }
   }
 
   function resetHighlight() {
-    ["ai1", "ai2"].forEach(id => {
+    ["ai1", "ai2", "player", "storyteller"].forEach(id => {
       const mesh = characterMeshes[id];
       if (mesh && mesh.material) {
+        // Don't reset player highlight during conversations
+        if (conversationCallback && id === 'player') {
+          console.log(`👤 Keeping player highlighted during conversation`);
+          return;
+        }
+        
         mesh.material.opacity = 0.8;
         const flipSign = Math.sign(mesh.scale.x) || 1;
         mesh.scale.set(1 * flipSign, 1, 1);
       }
     });
+  }
+  
+  function resetAllHighlights() {
+    console.log("🛡️ Resetting all character highlights");
+    ["ai1", "ai2", "player", "storyteller"].forEach(id => {
+      const mesh = characterMeshes[id];
+      if (mesh && mesh.material) {
+        mesh.material.transparent = true;
+        mesh.material.opacity = 0.8;
+        mesh.material.needsUpdate = true;
+        const flipSign = Math.sign(mesh.scale.x) || 1;
+        mesh.scale.set(1 * flipSign, 1, 1);
+      }
+    });
+  }
+
+  /* =========================
+     AI RESPONSE GENERATION
+  ========================= */
+  function generateAIResponse(userInput) {
+    console.log('🤖 Generating AI response for:', userInput);
+    
+    // Simple AI characters that respond to user input
+    const aiCharacters = ['elric', 'seraphine'];
+    const responses = [
+      "I understand your concern. We should proceed carefully.",
+      "That's a valid point. What do you think we should do next?",
+      "Agreed. Let's stay vigilant.",
+      "I sense something as well. We should be prepared."
+    ];
+    
+    // Pick a random AI character and response
+    const character = aiCharacters[Math.floor(Math.random() * aiCharacters.length)];
+    const response = responses[Math.floor(Math.random() * responses.length)];
+    
+    console.log(`🎭 ${character} will respond:`, response);
+    
+    // Show AI response after a brief delay
+    setTimeout(() => {
+      say(response, () => {
+        console.log('🤖 AI response completed - conversation ready for next input');
+        
+        // Show conversation input again for continued interaction
+        if (window.playerCharacterName) {
+          showConversationInstructions();
+        }
+      }, character, true, false);
+    }, 1000);
+  }
+  
+  function showConversationInstructions() {
+    // Show instructions only if they haven't been shown before
+    if (!instructionsShownOnce) {
+      const instructionText = "\n\n💬 Press RIGHT SHIFT to type or hold LEFT SHIFT to speak";
+      if (!textBox.textContent.includes(instructionText)) {
+        textBox.textContent += instructionText;
+      }
+      instructionsShownOnce = true;
+      console.log('💬 First-time instructions shown');
+    } else {
+      console.log('💬 Instructions already shown once, skipping');
+    }
+    console.log('💬 Conversation ready for user input');
   }
 
   /* =========================
@@ -606,6 +1360,209 @@ export function createScene() {
       uiLayer
     };
   }
+  
+  function stopAllVoice() {
+    console.log("🛑 Stopping all voice synthesis...");
+    
+    // Stop any ongoing voice synthesis through voice service
+    if (window.voiceService) {
+      try {
+        window.voiceService.stopVoice();
+      } catch (e) {
+        console.warn("Error stopping voice service:", e);
+      }
+    }
+    
+    // Stop speech synthesis directly
+    if ('speechSynthesis' in window) {
+      try {
+        speechSynthesis.cancel();
+      } catch (e) {
+        console.warn("Error canceling speech synthesis:", e);
+      }
+    }
+    
+    // Stop current dialogue controller
+    if (currentDialogueController) {
+      try {
+        currentDialogueController.stop();
+      } catch (e) {
+        console.warn("Error stopping dialogue controller:", e);
+      }
+      currentDialogueController = null;
+    }
+    
+    console.log("✅ All voice synthesis stopped");
+    
+    // Reset speaking state when all voice is stopped
+    isCurrentlySpeaking = false;
+    console.log('🔓 Reset speaking state after stopping all voice');
+  }
+
+  // Function to stop all voice when narrative ends completely
+  function endNarrative() {
+    // Stop any ongoing voice synthesis
+    if (window.voiceService) {
+      window.voiceService.stopVoice();
+    }
+    
+    // Stop speech synthesis directly
+    if ('speechSynthesis' in window) {
+      speechSynthesis.cancel();
+    }
+    
+    // Reset dialogue state
+    typing = false;
+    waitingForContinue = false;
+    currentDialogueController = null;
+    currentCharacterSpeaking = null;
+    continueCallback = null;
+    conversationCallback = null;
+    isCurrentlySpeaking = false; // Reset speaking state
+    
+    // Reset all character highlights when narrative ends
+    resetAllHighlights();
+  }
+  
+  function startFakeNarrative() {
+    console.log("🎭 Starting fake narrative for testing...");
+    
+    showBackground("assets/backgrounds/forest.jpg");
+    showCharacter("storyteller", "assets/characters/narrator.png", 0, 0);
+    
+    say(
+      "Welcome, brave adventurer! The mystical forest awaits. What will you do?",
+      () => {
+        showConversationInput((response) => {
+          say(`You said: "${response}". Your adventure continues!`, null, "storyteller", false); // Disable voice
+        });
+      },
+      "storyteller",
+      false // Disable voice synthesis for faster testing
+    );
+  }
+
+  /* =========================
+     SPEECH RECOGNITION
+  ========================= */
+  
+  function startSpeechRecognition() {
+    if (!speechRecognition || isRecording) return;
+    
+    try {
+      isRecording = true;
+      recordingStartTime = Date.now();
+      recordingIndicator.style.display = 'block';
+      
+      let finalTranscript = '';
+      let recognitionEnded = false;
+      
+      speechRecognition.onresult = (event) => {
+        if (recognitionEnded) return;
+        
+        try {
+          let interimTranscript = '';
+          
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              finalTranscript += transcript;
+            } else {
+              interimTranscript += transcript;
+            }
+          }
+          
+          // Update recording indicator with current transcript
+          const currentTranscript = (finalTranscript + interimTranscript).trim();
+          if (currentTranscript) {
+            recordingIndicator.innerHTML = `🎤 "${currentTranscript}"`;
+          }
+        } catch (resultError) {
+          console.warn('Speech recognition result error:', resultError);
+        }
+      };
+      
+      speechRecognition.onerror = (event) => {
+        console.warn('Speech recognition error:', event.error);
+        recognitionEnded = true;
+        setTimeout(() => stopSpeechRecognition(), 100);
+      };
+      
+      speechRecognition.onend = () => {
+        recognitionEnded = true;
+      };
+      
+      speechRecognition.start();
+      console.log('🎤 Started speech recognition');
+      
+    } catch (error) {
+      console.warn('Failed to start speech recognition:', error);
+      isRecording = false;
+      recordingIndicator.style.display = 'none';
+    }
+  }
+  
+  function stopSpeechRecognition() {
+    if (!speechRecognition || !isRecording) return;
+    
+    try {
+      isRecording = false;
+      
+      // Clear event handlers to prevent further callbacks
+      speechRecognition.onresult = null;
+      speechRecognition.onerror = null;
+      
+      speechRecognition.stop();
+      
+      // Handle the final result with timeout protection
+      const handleFinalResult = () => {
+        recordingIndicator.style.display = 'none';
+        
+        try {
+          const recognizedText = recordingIndicator.innerHTML.replace('🎤 "', '').replace('"', '').trim();
+          if (recognizedText && recognizedText !== 'Recording...' && conversationCallback) {
+            console.log('🗣️ Speech recognized:', recognizedText);
+            
+            // Use the recognized text as player input
+            conversationInputBox.style.display = 'none';
+            dialogue.style.display = 'block';
+            
+            const callback = conversationCallback;
+            conversationCallback = null;
+            
+            // Dim AI characters now that user has completed their speech input
+            ["ai1", "ai2"].forEach(meshId => {
+              const mesh = characterMeshes[meshId];
+              if (mesh && mesh.material) {
+                mesh.material.transparent = true;
+                mesh.material.opacity = 0.4;
+                mesh.material.needsUpdate = true;
+                const flipSign = Math.sign(mesh.scale.x) || 1;
+                mesh.scale.set(1 * flipSign, 1, 1);
+                console.log(`🔅 Dimmed AI ${meshId} - user completed speech input`);
+              }
+            });
+            
+            callback(recognizedText);
+          }
+        } catch (finalError) {
+          console.warn('Error processing final speech result:', finalError);
+        }
+      };
+      
+      speechRecognition.onend = handleFinalResult;
+      
+      // Fallback timeout in case onend doesn't fire
+      setTimeout(handleFinalResult, 500);
+      
+      console.log('🎤 Stopped speech recognition');
+      
+    } catch (error) {
+      console.warn('Failed to stop speech recognition:', error);
+      isRecording = false;
+      recordingIndicator.style.display = 'none';
+    }
+  }
 
   /* ========================= */
 
@@ -621,7 +1578,83 @@ export function createScene() {
     showConversationInput,
     highlightCharacter,
     resetHighlight,
+    clearDialogueQueue,
+    resetSceneState,
     prepare3DModel,
-    restart2DRendering
+    restart2DRendering,
+    endNarrative,
+    startFakeNarrative,
+    onCharacterFinishedTalking
+  };
+  
+  // Function called when a character finishes talking
+  function onCharacterFinishedTalking(characterName) {
+    if (conversationCallback && characterName && characterName !== window.playerCharacterName) {
+      console.log(`🎭 ${characterName} finished talking - dimming character`);
+      dimCharacter(characterName);
+      
+      // Ensure player stays highlighted
+      if (window.playerCharacterName) {
+        highlightCharacter(window.playerCharacterName);
+      }
+    }
+  }
+  
+  // Quick test function for speech recognition - call this in console
+  window.testSpeech = function() {
+    console.log("🎤 Quick speech recognition test");
+    showConversationInput((response) => {
+      console.log(`✅ Speech test result: "${response}"`);
+      say(`Speech test successful! You said: "${response}"`, null, "storyteller", false);
+    });
+  };
+  
+  // Immediate conversation test - bypasses all narrative
+  window.quickConversation = function() {
+    console.log("💬 Setting up immediate conversation for speech testing...");
+    
+    // Clear any existing content
+    textBox.textContent = "You are Ronan. Elric and Seraphine stand with you. What do you say?";
+    textBox.style.display = "block";
+    
+    // Immediately show conversation input
+    showConversationInput((response) => {
+      console.log(`✅ Conversation result: "${response}"`);
+      textBox.textContent = `You said: "${response}". The adventure continues...`;
+    });
+  };
+  
+  // Test microphone permissions - call this in console
+  window.testMicrophone = function() {
+    console.log("🎤 Testing microphone access...");
+    
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      console.error("❌ getUserMedia not supported");
+      return;
+    }
+    
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then((stream) => {
+        console.log("✅ Microphone access granted!");
+        console.log("🎤 You can now use speech recognition");
+        
+        // Stop the test stream
+        stream.getTracks().forEach(track => track.stop());
+        
+        // Test speech recognition availability
+        if (speechRecognition) {
+          console.log("✅ Speech recognition ready");
+          console.log("💡 Try calling testSpeech() to test it");
+        } else {
+          console.warn("❌ Speech recognition not available");
+        }
+      })
+      .catch((error) => {
+        console.error("❌ Microphone access denied:", error);
+        console.log("💡 Please check browser permissions:");
+        console.log("   Chrome/Edge: Click 🔒 icon → Microphone → Allow");
+        console.log("   Firefox: Click 🔒 icon → Microphone → Allow");  
+        console.log("   Safari: Safari → Settings → Websites → Microphone → Allow");
+      });
   };
 }
