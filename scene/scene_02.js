@@ -5,7 +5,7 @@ import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/exampl
 import { EffectManager } from "./EffectManager.js";
 import { Boss } from "./Boss.js";
 import { voiceService, renderDialogueWithVoice } from '../voice-service.js';
-import { FaceTracker, headPoseToCamera } from '../headTracking.js';
+import { FaceTracker, headPoseToCamera, getWebcamStream } from '../headTracking.js';
 
 // Character class for managing hero characters (Swordman, Archer, Magician)
 class Character {
@@ -1861,11 +1861,8 @@ export async function run({ scene }) {
   const faceTracker = new FaceTracker();
   
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ 
-      video: { width: 640, height: 480, facingMode: 'user' } 
-    });
-    video.srcObject = stream;
-    await video.play();
+    // Use the new getWebcamStream utility for better Windows compatibility
+    await getWebcamStream(video, { width: 640, height: 480, facingMode: 'user' });
     
     // Initialize the face landmarker
     const initialized = await faceTracker.initialize();
@@ -1881,7 +1878,8 @@ export async function run({ scene }) {
       console.log('✅ Head tracking initialized and enabled');
     }
   } catch (err) {
-    console.warn('⚠️ Could not initialize head tracking:', err);
+    console.warn('⚠️ Could not initialize head tracking:', err.message || err);
+    // Continue without head tracking - the game should still work
   }
   
   // Add orbit controls for testing (disabled when head tracking is active)

@@ -2,7 +2,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js";
 import { FBXLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/FBXLoader.js";
 import { Boss } from "./Boss.js";
-import { FaceTracker, headPoseToCamera } from "../headTracking.js";
+import { FaceTracker, headPoseToCamera, getWebcamStream } from "../headTracking.js";
 
 // Simple Character class for loading models
 class SimpleCharacter {
@@ -88,11 +88,8 @@ export async function run({ scene }) {
   // Get webcam stream
   let headTrackingEnabled = false;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ 
-      video: { width: 640, height: 480, facingMode: 'user' } 
-    });
-    videoElement.srcObject = stream;
-    await videoElement.play();
+    // Use the new getWebcamStream utility for better Windows compatibility
+    await getWebcamStream(videoElement, { width: 640, height: 480, facingMode: 'user' });
     
     // Initialize face tracker
     const faceTracker = new FaceTracker();
@@ -111,7 +108,7 @@ export async function run({ scene }) {
       console.log("✓ Head tracking initialized");
     }
   } catch (error) {
-    console.warn('Webcam not available:', error);
+    console.warn('Webcam not available:', error.message || error);
     videoElement.remove();
   }
   

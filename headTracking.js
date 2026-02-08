@@ -80,19 +80,34 @@ export class FaceTracker {
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
       );
 
-      // Create FaceLandmarker
-      this.faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
-          delegate: 'GPU'
-        },
-        outputFaceBlendshapes: false,
-        runningMode: 'VIDEO',
-        numFaces: 1
-      });
+      // Try GPU first, fallback to CPU on Windows if GPU fails
+      let delegate = 'GPU';
+      try {
+        this.faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+            delegate: 'GPU'
+          },
+          outputFaceBlendshapes: false,
+          runningMode: 'VIDEO',
+          numFaces: 1
+        });
+      } catch (gpuError) {
+        console.warn('GPU delegate failed, falling back to CPU:', gpuError);
+        delegate = 'CPU';
+        this.faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+            delegate: 'CPU'
+          },
+          outputFaceBlendshapes: false,
+          runningMode: 'VIDEO',
+          numFaces: 1
+        });
+      }
 
       this.isReady = true;
-      console.log("✓ FaceLandmarker initialized successfully");
+      console.log(`✓ FaceLandmarker initialized successfully with ${delegate} delegate`);
       return true;
     } catch (error) {
       console.error('Error initializing FaceLandmarker:', error);
@@ -170,4 +185,83 @@ export function headPoseToCamera(headPose, strengthX = 4, strengthY = 4, strengt
   const clampedZ = Math.max(60, Math.min(140, cameraZ));
 
   return { x: clampedX, y: clampedY, z: clampedZ };
+}
+
+// Utility function to get webcam stream with Windows compatibility
+export async function getWebcamStream(videoElement, options = {}) {
+  const defaultOptions = {
+    width: 640,
+    height: 480,
+    facingMode: 'user'
+  };
+  
+  const constraints = {
+    audio: false,
+    video: {
+      width: { ideal: options.width || defaultOptions.width },
+      height: { ideal: options.height || defaultOptions.height },
+      facingMode: options.facingMode || defaultOptions.facingMode
+    }
+  };
+
+  try {
+    // Check if getUserMedia is supported
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('getUserMedia is not supported in this browser');
+    }
+
+    // Request camera access
+    console.log('Requesting camera access...');
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    
+    // Set up video element
+    videoElement.srcObject = stream;
+    videoElement.setAttribute('playsinline', ''); // Important for iOS and some browsers
+    videoElement.setAttribute('autoplay', '');
+    videoElement.muted = true; // Mute to avoid feedback
+    
+    // Wait for video to be ready
+    await new Promise((resolve, reject) => {
+      videoElement.onloadedmetadata = () => {
+        videoElement.play()
+          .then(resolve)
+          .catch(reject);
+      };
+      videoElement.onerror = reject;
+      
+      // Timeout after 5 seconds
+      setTimeout(() => reject(new Error('Video loading timeout')), 5000);
+    });
+
+    console.log('✓ Webcam stream initialized');
+    return stream;
+  } catch (error) {
+    // Provide helpful error messages
+    if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+      throw new Error('Camera permission denied. Please allow camera access in your browser settings.');
+    } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+      throw new Error('No camera found. Please connect a camera and try again.');
+    } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+      throw new Error('Camera is already in use by another application. Please close other applications using the camera.');
+    } else if (error.name === 'OverconstrainedError') {
+      // Try again with less strict constraints
+      console.warn('Camera constraints too strict, trying with relaxed constraints...');
+      try {
+        const relaxedStream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: true // Minimal constraints
+        });
+        videoElement.srcObject = relaxedStream;
+        await videoElement.play();
+        console.log('✓ Webcam stream initialized with relaxed constraints');
+        return relaxedStream;
+      } catch (relaxedError) {
+        throw new Error('Camera available but does not support requested settings: ' + relaxedError.message);
+      }
+    } else if (error.name === 'SecurityError') {
+      throw new Error('Camera access blocked due to security settings. Please use HTTPS or localhost.');
+    } else {
+      throw new Error('Failed to access camera: ' + error.message);
+    }
+  }
 }
