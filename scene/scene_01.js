@@ -3,7 +3,10 @@ export async function run({ scene }) {
   await act1_OpeningNarrative(scene);
   
   // ACT 2: Character Selection (continues automatically after Act 1)
-  await act2_CharacterSelection(scene);
+  const { character, aiCharacters } = await act2_CharacterSelection(scene);
+  
+  // ACT 3: Conversation and exploration
+  await act3_Conversation(scene, character, aiCharacters, window.campaignData);
 }
 
 async function act1_OpeningNarrative(scene) {
@@ -213,8 +216,8 @@ async function act2_CharacterSelection(scene) {
   ];
   const aiCharacters = allChars.filter((_, i) => i !== index);
   
-  // ACT 3: Conversation and exploration (wait for character selection to fully complete)
-  await act3_Conversation(scene, character, aiCharacters, campaignData);
+  // Return character data for act3
+  return { character, aiCharacters };
 }
 
 function splitIntoChunks(text, maxLength) {
@@ -340,7 +343,7 @@ Respond with only: "yes" or "no"`;
       const shouldEnd = endData.message.content.trim().toLowerCase().includes("yes");
 
       if (shouldEnd) {
-        // Transition to Act 4
+        // End conversation and proceed to Act 4
         scene.say("The party steels themselves and steps forward into the Black Keep...");
         await new Promise(resolve => setTimeout(resolve, 2000));
         await act4_GoldenHall(scene, playerCharacter, aiCharacters, campaignData);
@@ -643,13 +646,18 @@ And then—slowly, inevitably—the dragon's eyes focus on you.`;
   const chunks = splitIntoChunks(narrative, 400);
   await showNarrativeChunks(scene, chunks);
   
-  // Prepare for 3D model loading
+  // Store party data for next scene
+  window.playerCharacter = playerCharacter;
+  window.aiCharacters = aiCharacters;
+  
+  // Prepare for 3D battle scene
   await new Promise(resolve => {
-    scene.say("Prepare for battle...", resolve);
+    scene.say("...", resolve);
   });
   
-  // Transition to 3D battle scene
-  scene.prepare3DModel();
+  // Transition to battle scene (scene_02)
+  const scene02 = await import("./scene_02.js");
+  await scene02.run({ scene });
 }
 
 async function continueWithCharacter(scene, character) {

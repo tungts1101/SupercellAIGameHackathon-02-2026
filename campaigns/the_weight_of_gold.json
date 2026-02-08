@@ -65,33 +65,26 @@
       ],
       "arc_perspective": "Views the dragon as a siege engine that must be broken before recovery is possible.",
       "actions": {
-        "attack": {
+        "slash": {
           "type": "melee",
           "cost": 12,
           "risk": "low",
           "intent": "maintain pressure",
           "requirements": ["melee_range"]
         },
-        "heavy_attack": {
+        "heavyslash": {
           "type": "melee",
           "cost": 25,
           "risk": "high",
           "intent": "break guard or stagger",
           "requirements": ["melee_range", "enemy_exposed"]
         },
-        "dodge": {
-          "type": "movement",
-          "cost": 15,
-          "risk": "low",
-          "intent": "evade imminent danger",
-          "requirements": ["space_to_move"]
-        },
-        "cast_defense": {
-          "type": "magic_assist",
+        "block": {
+          "type": "defense",
           "cost": 10,
           "risk": "low",
-          "intent": "reinforce defense",
-          "requirements": []
+          "intent": "reduce incoming damage",
+          "requirements": ["melee_range"]
         }
       }
     },
@@ -113,33 +106,26 @@
       ],
       "arc_perspective": "Focuses on ending the threat efficiently after seeing defenses fail due to unpaid guards.",
       "actions": {
-        "shoot": {
+        "shootarrow": {
           "type": "ranged",
           "cost": 10,
           "risk": "low",
           "intent": "precise damage",
           "requirements": ["clear_line_of_sight"]
         },
-        "shoot_multiple": {
-          "type": "ranged",
-          "cost": 22,
+        "stab": {
+          "type": "melee",
+          "cost": 12,
           "risk": "medium",
-          "intent": "suppress movement",
-          "requirements": ["clear_line_of_sight", "stable_footing"]
+          "intent": "close range attack",
+          "requirements": ["melee_range"]
         },
-        "hide": {
-          "type": "stealth",
+        "dodge": {
+          "type": "movement",
           "cost": 14,
           "risk": "low",
-          "intent": "break line of sight",
-          "requirements": ["available_cover"]
-        },
-        "cast_defense": {
-          "type": "magic_assist",
-          "cost": 8,
-          "risk": "low",
-          "intent": "minor warding",
-          "requirements": []
+          "intent": "evade attack",
+          "requirements": ["space_to_move"]
         }
       }
     },
@@ -161,25 +147,25 @@
       ],
       "arc_perspective": "Knows dragon hoards distort reality and that destroying them risks collapse.",
       "actions": {
-        "cast_attack": {
+        "castspell": {
           "type": "magic_offense",
           "cost": 20,
           "risk": "medium",
           "intent": "focused elemental burst",
           "requirements": []
         },
-        "cast_defense": {
-          "type": "magic_defense",
-          "cost": 18,
-          "risk": "low",
-          "intent": "stabilize and mitigate damage",
+        "castheavyspell": {
+          "type": "magic_offense",
+          "cost": 30,
+          "risk": "high",
+          "intent": "powerful magic attack",
           "requirements": []
         },
-        "heal": {
+        "healstamina": {
           "type": "magic_restore",
           "cost": 25,
           "risk": "medium",
-          "intent": "prevent ally collapse",
+          "intent": "restore ally stamina/health",
           "requirements": ["ally_injured"]
         }
       }
@@ -231,6 +217,30 @@
       "symbolism": "rule_replaced_by_accumulation"
     },
 
+    "animation_mappings": {
+      "fire_breath": "BreathFireHigh",
+      "fire_breath_low": "BreathFireLow",
+      "claw_attack": "SweptClaw",
+      "tail_sweep": "SweptTail",
+      "golden_roar": "Roar",
+      "hoard_shift": "StompFoot",
+      "victory_roar": "RoarVictory",
+      "walk": "Walk",
+      "fly_away": "Fly",
+      "death": "Die"
+    },
+
+    "ai_model": {
+      "name": "gemma:7b",
+      "temperature": 0.8,
+      "role": "tactical_decision_maker",
+      "responsibilities": [
+        "choose_combat_actions",
+        "generate_victory_narrative",
+        "determine_victory_scenario"
+      ]
+    },
+
     "actions": {
       "fire_breath": {
         "type": "area_attack",
@@ -240,10 +250,26 @@
         "risk": "high",
         "intent": "overwhelm intruders and reassert dominance",
         "requirements": [],
+        "animation": "BreathFireHigh",
         "narrative_effects": [
           "extreme_heat",
           "reduced_visibility",
           "environmental_instability_increase"
+        ]
+      },
+
+      "fire_breath_low": {
+        "type": "area_attack",
+        "damage_type": "fire",
+        "targets": "front_party_members",
+        "cost": 25,
+        "risk": "medium",
+        "intent": "direct assault on frontline",
+        "requirements": [],
+        "animation": "BreathFireLow",
+        "narrative_effects": [
+          "intense_heat",
+          "ground_scorching"
         ]
       },
 
@@ -257,6 +283,7 @@
         "requirements": [
           "target_in_reach"
         ],
+        "animation": "SweptClaw",
         "narrative_effects": [
           "knockback",
           "armor_damage"
@@ -271,6 +298,7 @@
         "risk": "medium",
         "intent": "clear space and reposition",
         "requirements": ["enemies_flanking"],
+        "animation": "SweptTail",
         "narrative_effects": [
           "knockback",
           "gold_pile_collapse",
@@ -286,6 +314,7 @@
         "risk": "low",
         "intent": "break morale and induce greed",
         "requirements": [],
+        "animation": "Roar",
         "narrative_effects": [
           "temporary_confusion",
           "greed_temptation",
@@ -301,6 +330,7 @@
         "risk": "low",
         "intent": "use terrain as weapon",
         "requirements": ["unstable_gold_piles_nearby"],
+        "animation": "StompFoot",
         "narrative_effects": [
           "gold_avalanche",
           "movement_restriction",
@@ -348,6 +378,73 @@
       "urgency": 0.7,
       "danger": 0.9,
       "hope": 0.4
+    }
+  },
+
+  "battle_outcomes": {
+    "dragon_victory": {
+      "condition": "all_heroes_health_zero",
+      "ai_decides_scenario": true,
+      "scenarios": {
+        "triumphant_departure": {
+          "probability": 0.6,
+          "sequence": [
+            {
+              "action": "walk",
+              "animation": "Walk",
+              "duration": "brief"
+            },
+            {
+              "action": "speak",
+              "ai_model": "gemma:7b",
+              "prompt": "Generate a 2-3 sentence contemptuous monologue from Avarrax after crushing all intruders. Emphasize possession and inevitability.",
+              "temperature": 0.9
+            },
+            {
+              "action": "fly_away",
+              "animation": "Fly",
+              "return_to_idle": false
+            },
+            {
+              "action": "transition",
+              "target": "scene_03"
+            }
+          ]
+        },
+        "dominating_presence": {
+          "probability": 0.4,
+          "sequence": [
+            {
+              "action": "victory_roar",
+              "animation": "RoarVictory"
+            },
+            {
+              "action": "speak",
+              "ai_model": "gemma:7b",
+              "prompt": "Generate a 1-2 sentence declaration of absolute dominance from Avarrax. Brief and dismissive.",
+              "temperature": 0.9
+            },
+            {
+              "action": "transition",
+              "target": "scene_03"
+            }
+          ]
+        }
+      }
+    },
+    "dragon_defeat": {
+      "condition": "boss_health_zero",
+      "sequence": [
+        {
+          "action": "death",
+          "animation": "Die",
+          "return_to_idle": false
+        },
+        {
+          "action": "transition",
+          "target": "scene_03"
+        }
+      ]
     }
   },
 

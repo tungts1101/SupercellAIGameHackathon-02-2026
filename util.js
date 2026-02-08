@@ -1,5 +1,12 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 
+export async function getCampaignData() {
+  if (!window.campaignData) {
+    window.campaignData = await fetch("./campaigns/the_weight_of_gold.json").then(r => r.json());
+  }
+  return window.campaignData;
+}
+
 export function createScene() {
   /* =========================
      LAYERS
@@ -122,7 +129,10 @@ export function createScene() {
     });
   }
 
+  let renderLoopActive = true;
+  
   function render() {
+    if (!renderLoopActive) return;
     renderer.render(scene, camera);
     requestAnimationFrame(render);
   }
@@ -532,9 +542,26 @@ export function createScene() {
   }
 
   /* =========================
+     RESTART 2D RENDERING
+  ========================= */
+  function restart2DRendering() {
+    // Resume the 2D render loop if it was stopped
+    if (!renderLoopActive) {
+      renderLoopActive = true;
+      render();
+    }
+    
+    // Re-show dialogue box (it was hidden by prepare3DModel)
+    dialogue.style.display = "block";
+  }
+
+  /* =========================
      3D MODEL PREPARATION
   ========================= */
   function prepare3DModel() {
+    // Stop the original 2D render loop
+    renderLoopActive = false;
+    
     // Hide dialogue and UI elements
     dialogue.style.display = "none";
     conversationInputBox.style.display = "none";
@@ -569,11 +596,14 @@ export function createScene() {
     
     // Provide access to the scene for 3D model loading
     return {
-      scene,
+      sceneObj: scene,
       camera,
       renderer,
       loader,
-      loadingMessage
+      loadingMessage,
+      mainLayer,
+      effectLayer,
+      uiLayer
     };
   }
 
@@ -591,6 +621,7 @@ export function createScene() {
     showConversationInput,
     highlightCharacter,
     resetHighlight,
-    prepare3DModel
+    prepare3DModel,
+    restart2DRendering
   };
 }
