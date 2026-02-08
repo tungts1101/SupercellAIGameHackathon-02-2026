@@ -121,13 +121,33 @@ export class FaceTracker {
       return false;
     }
 
+    if (!videoElement) {
+      console.error('No video element provided');
+      return false;
+    }
+
+    // Ensure video is ready
+    if (videoElement.readyState < 2) {
+      console.log('Waiting for video to be ready...');
+      await new Promise((resolve) => {
+        const checkReady = () => {
+          if (videoElement.readyState >= 2) {
+            resolve();
+          } else {
+            setTimeout(checkReady, 100);
+          }
+        };
+        checkReady();
+      });
+    }
+
     this.videoElement = videoElement;
     this.onHeadPoseUpdate = onHeadPoseUpdate;
     this.isRunning = true;
 
     // Start the detection loop
     this.detect();
-    console.log("✓ Head tracking started");
+    console.log("✓ Head tracking started, video readyState:", videoElement.readyState);
     return true;
   }
 

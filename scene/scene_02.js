@@ -1849,23 +1849,14 @@ export async function run({ scene }) {
   let headTrackingEnabled = false;
   let currentHeadPose = null;
   
-  // Create webcam video element (visible for debugging)
+  // Create webcam video element (hidden - no window shown to user)
   const video = document.createElement('video');
-  video.width = 320;
-  video.height = 240;
+  video.width = 640;
+  video.height = 480;
   video.autoplay = true;
   video.muted = true;
   video.playsInline = true;
-  // Make video visible in bottom-right corner for debugging
-  video.style.position = 'fixed';
-  video.style.bottom = '20px';
-  video.style.right = '20px';
-  video.style.width = '320px';
-  video.style.height = '240px';
-  video.style.border = '2px solid lime';
-  video.style.borderRadius = '10px';
-  video.style.zIndex = '10000';
-  video.style.transform = 'scaleX(-1)'; // Mirror for natural viewing
+  video.style.display = 'none'; // Hidden from view
   document.body.appendChild(video);
   
   // Initialize face tracker
@@ -1875,22 +1866,29 @@ export async function run({ scene }) {
     console.log('🎥 Starting webcam initialization...');
     // Use the new getWebcamStream utility for better Windows compatibility
     await getWebcamStream(video, { width: 640, height: 480, facingMode: 'user' });
-    console.log('✓ Webcam stream active, video playing:', !video.paused);
+    console.log('✓ Webcam stream active, video readyState:', video.readyState, 'playing:', !video.paused);
+    
+    // Wait for video to actually be playing
+    if (video.readyState < 2) {
+      await new Promise((resolve) => {
+        video.addEventListener('loadeddata', resolve, { once: true });
+      });
+    }
     
     // Initialize the face landmarker
     console.log('🤖 Initializing face landmarker...');
     const initialized = await faceTracker.initialize();
     
     if (initialized) {
-      // Enable tracking BEFORE starting the callback
+      // Enable tracking FIRST
       headTrackingEnabled = true;
       
-      // Start tracking with callback
+      // Start tracking with callback - remove the headTrackingEnabled check inside
       await faceTracker.startTracking(video, (headPose) => {
         currentHeadPose = headPose;
         // Log occasionally to verify it's working
-        if (Math.random() < 0.01) {
-          console.log('📍 Head pose updated:', headPose);
+        if (Math.random() < 0.005) {
+          console.log('📍 Head pose:', headPose);
         }
       });
       console.log('✅ Head tracking initialized and enabled');
