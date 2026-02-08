@@ -619,6 +619,12 @@ export function createScene() {
       e.preventDefault();
       console.log(`🔑 LEFT SHIFT pressed. typingMode: ${isTypingMode}, conversationCallback: ${!!conversationCallback}, isRecording: ${isRecording}`);
       
+      // Only allow during conversation act (when activeSceneConversationHandler exists)
+      if (!window.activeSceneConversationHandler) {
+        console.log('❌ Speech recognition blocked - not in conversation act');
+        return;
+      }
+      
       // Don't do speech recognition if in typing mode
       if (isTypingMode) {
         console.log('❌ Speech recognition blocked - currently in typing mode');
@@ -686,6 +692,12 @@ export function createScene() {
     if (e.key === "Shift" && e.location === 2) { // Right Shift only (location 2)
       e.preventDefault();
       console.log(`🔑 RIGHT SHIFT pressed. conversationCallback: ${!!conversationCallback}`);
+      
+      // Only allow during conversation act (when activeSceneConversationHandler exists)
+      if (!window.activeSceneConversationHandler) {
+        console.log('❌ Typing input blocked - not in conversation act');
+        return;
+      }
       
       // Stop any active speech recognition first
       if (isRecording) {
@@ -999,6 +1011,9 @@ export function createScene() {
       highlightCharacter(window.playerCharacterName);
       console.log(`💬 Starting conversation - player highlighted, others dimmed`);
     }
+    
+    // Show conversation instructions immediately
+    showConversationInstructions();
   }
   
   function showActualConversationInput() {
@@ -1344,7 +1359,7 @@ export function createScene() {
     loadingMessage.style.textAlign = "center";
     loadingMessage.style.zIndex = "100";
     loadingMessage.style.textShadow = "2px 2px 4px rgba(0,0,0,0.8)";
-    loadingMessage.innerHTML = "Loading 3D Battle Scene...<br><span style='font-size: 20px; opacity: 0.7;'>Preparing for confrontation with Avarrax</span>";
+    loadingMessage.textContent = "Prepare for battle ...";
     
     uiLayer.appendChild(loadingMessage);
     

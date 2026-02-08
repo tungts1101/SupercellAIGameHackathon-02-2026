@@ -14,8 +14,8 @@ export class Boss {
     this.combatSystem = null; // Will be set later
     
     // Combat stats
-    this.maxHealth = 300;
-    this.health = 300;
+    this.maxHealth = 100;
+    this.health = 100;
     this.isDead = false;
     
     // UI elements
@@ -34,12 +34,7 @@ export class Boss {
       gltfLoader.load(
         gltfPath,
         resolve,
-        (progress) => {
-          console.log("Prepare for battle ...");
-          if (loadingMessage) {
-            loadingMessage.innerHTML = `Prepare for battle ...`;
-          }
-        },
+        undefined,
         reject
       );
     });

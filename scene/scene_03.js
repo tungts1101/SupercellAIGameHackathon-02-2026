@@ -4,6 +4,23 @@ import { voiceService } from '../voice-service.js';
 export async function run({ scene, result = 'LOSE' }) {
   console.log("Scene 03: Epilogue - Result:", result);
   
+  // Stop battle music
+  if (window.battleMusic) {
+    window.battleMusic.pause();
+    window.battleMusic.currentTime = 0;
+  }
+  
+  // Play ending music based on result
+  const endingMusic = new Audio(
+    result === 'WIN' 
+      ? './assets/Classicals.de-Vivaldi-The-Four-Seasons-01-John-Harrison-with-the-Wichita-State-University-Chamber-Players-Spring-Mvt-1-Allegro.mp3'
+      : './assets/12+John+Harrison+with+the+Wichita+State+University+Chamber+Players+-+Winter+Mvt+3+Allegro.mp3'
+  );
+  endingMusic.volume = 0.2;
+  endingMusic.loop = true;
+  endingMusic.play().catch(err => console.log('Ending music autoplay prevented:', err));
+  window.endingMusic = endingMusic;
+  
   // Restart the 2D rendering loop (was stopped by prepare3DModel)
   scene.restart2DRendering();
   

@@ -13,6 +13,27 @@ export async function run({ scene }) {
 
 async function act1_OpeningNarrative(scene) {
   scene.showBackground("./assets/scene_01_background_01.png");
+  
+  // Start background music after first user interaction (TAB press will trigger it)
+  if (!window.backgroundMusic) {
+    const backgroundMusic = new Audio('./assets/Classicals.de-Vivaldi-The-Four-Seasons-05-John-Harrison-with-the-Wichita-State-University-Chamber-Players-Summer-Mvt-2-Adagio.mp3');
+    backgroundMusic.volume = 0.2; // Lower volume to not overlay narrative voice
+    backgroundMusic.loop = true;
+    window.backgroundMusic = backgroundMusic;
+    
+    // Try to play immediately, but it might be blocked
+    backgroundMusic.play().catch(err => {
+      console.log('Background music autoplay prevented, will start on first interaction');
+      // Set up one-time event listener to start music on any user interaction
+      const startMusic = () => {
+        backgroundMusic.play();
+        document.removeEventListener('keydown', startMusic);
+        document.removeEventListener('click', startMusic);
+      };
+      document.addEventListener('keydown', startMusic, { once: true });
+      document.addEventListener('click', startMusic, { once: true });
+    });
+  }
 
   scene.showCharacter(
     "storyteller",
@@ -231,7 +252,7 @@ function splitIntoChunks(text, maxLength) {
 async function showNarrativeChunks(scene, chunks) {
   for (let i = 0; i < chunks.length; i++) {
     await new Promise(resolve => {
-      scene.say(chunks[i], resolve, 'storyteller');
+      scene.say(chunks[i], resolve, 'storyteller', true); // Enable voice from the start
     });
   }
 }
@@ -373,6 +394,9 @@ Respond with only: "yes" or "no"`;
 
       if (shouldEnd) {
         // End conversation and proceed to Act 4
+        console.log('🔚 Conversation ending - cleaning up conversation handler');
+        window.activeSceneConversationHandler = null; // Clear handler to disable SHIFT key input
+        
         scene.say("The party steels themselves and steps forward into the Black Keep...", null, 'storyteller');
         await new Promise(resolve => setTimeout(resolve, 2000));
         await act4_GoldenHall(scene, playerCharacter, aiCharacters, campaignData);
@@ -691,6 +715,12 @@ And then—slowly, inevitably—the dragon's eyes focus on you.`;
   await new Promise(resolve => {
     scene.say("...", resolve, 'storyteller');
   });
+  
+  // Stop background music before transitioning to battle
+  if (window.backgroundMusic) {
+    window.backgroundMusic.pause();
+    window.backgroundMusic.currentTime = 0;
+  }
   
   // Transition to battle scene (scene_02)
   const scene02 = await import("./scene_02.js");

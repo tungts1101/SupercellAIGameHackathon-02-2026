@@ -5,6 +5,7 @@ import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/exampl
 import { EffectManager } from "./EffectManager.js";
 import { Boss } from "./Boss.js";
 import { voiceService, renderDialogueWithVoice } from '../voice-service.js';
+import { FaceTracker, headPoseToCamera } from '../headTracking.js';
 
 // Character class for managing hero characters (Swordman, Archer, Magician)
 class Character {
@@ -19,10 +20,10 @@ class Character {
     this.actionMap = {}; // Maps action names to animation names
     
     // Combat stats
-    this.maxHealth = 100;
-    this.health = 100;
-    this.maxStamina = 100;
-    this.stamina = 100;
+    this.maxHealth = 50;
+    this.health = 50;
+    this.maxStamina = 50;
+    this.stamina = 50;
     this.isInDecisionWindow = false;
     this.decisionTimeLeft = 0;
     this.decisionCallback = null;
@@ -701,11 +702,11 @@ class TurnSystem {
       if (this.turnTimeLeft <= 0) {
         this.stopTurnTimer();
         // Auto-end turn if time runs out
+        console.log('⏰ Time expired! Turn skipped.');
         if (window.currentPlayerCharacter) {
-          console.log('⏰ Time expired! Player turn skipped.');
           window.currentPlayerCharacter = null;
-          this.endTurn();
         }
+        this.endTurn();
       }
     }, 1000);
   }
@@ -1138,6 +1139,13 @@ class TurnSystem {
       // Transition to scene_03 with WIN result
       console.log('Transitioning to scene_03 with WIN result...');
       
+      // Stop turn system and cleanup
+      if (window.turnSystem) {
+        window.turnSystem.gameEnded = true;
+        window.turnSystem.stopTurnTimer();
+        window.turnSystem = null;
+      }
+      
       // Force restart 2D rendering before transition
       window.sceneAPI.restart2DRendering();
       
@@ -1281,6 +1289,13 @@ class TurnSystem {
     // Transition to scene_03 with LOSE result
     console.log('Transitioning to scene_03 with LOSE result...');
     
+    // Stop turn system and cleanup
+    if (window.turnSystem) {
+      window.turnSystem.gameEnded = true;
+      window.turnSystem.stopTurnTimer();
+      window.turnSystem = null;
+    }
+    
     // Force restart 2D rendering before transition
     window.sceneAPI.restart2DRendering();
     
@@ -1328,6 +1343,13 @@ class TurnSystem {
     
     // Transition to scene_03 with LOSE result
     console.log('Transitioning to scene_03 with LOSE result...');
+    
+    // Stop turn system and cleanup
+    if (window.turnSystem) {
+      window.turnSystem.gameEnded = true;
+      window.turnSystem.stopTurnTimer();
+      window.turnSystem = null;
+    }
     
     // Force restart 2D rendering before transition
     window.sceneAPI.restart2DRendering();
@@ -1790,6 +1812,19 @@ export async function run({ scene }) {
   // Store scene API globally for scene transitions
   window.sceneAPI = scene;
   
+  // Stop scene_01 background music if playing
+  if (window.backgroundMusic) {
+    window.backgroundMusic.pause();
+    window.backgroundMusic.currentTime = 0;
+  }
+  
+  // Start battle background music
+  const battleMusic = new Audio('./assets/09+John+Harrison+with+the+Wichita+State+University+Chamber+Players+-+Autumn+Mvt+3+Allegro.mp3');
+  battleMusic.volume = 0.2; // Battle music at 20% volume
+  battleMusic.loop = true;
+  battleMusic.play().catch(err => console.log('Battle music autoplay prevented:', err));
+  window.battleMusic = battleMusic;
+  
   // Prepare 3D battle scene
   const { sceneObj, camera, renderer, loader, loadingMessage, mainLayer } = scene.prepare3DModel();
   
@@ -1799,21 +1834,62 @@ export async function run({ scene }) {
   const aiCharacters = window.aiCharacters;
   
   console.log("Starting 3D battle scene...");
+
   
   // Switch to perspective camera for 3D viewing
   const perspectiveCamera = new THREE.PerspectiveCamera(
-    75,
+    90, // Wider field of view
     window.innerWidth / window.innerHeight,
     0.1,
     1000
   );
-  perspectiveCamera.position.set(0, 5, 100); // Zoomed out further
+  perspectiveCamera.position.set(0, 5, 300); // Further and lower
   
-  // Add orbit controls for testing
+  // Setup head tracking
+  let headTrackingEnabled = false;
+  let currentHeadPose = null;
+  
+  // Create webcam video element (hidden)
+  const video = document.createElement('video');
+  video.width = 320;
+  video.height = 240;
+  video.autoplay = true;
+  video.style.display = 'none'; // Hidden from view
+  document.body.appendChild(video);
+  
+  // Initialize face tracker
+  const faceTracker = new FaceTracker();
+  
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { width: 640, height: 480, facingMode: 'user' } 
+    });
+    video.srcObject = stream;
+    await video.play();
+    
+    // Initialize the face landmarker
+    const initialized = await faceTracker.initialize();
+    
+    if (initialized) {
+      // Start tracking with callback
+      await faceTracker.startTracking(video, (headPose) => {
+        if (headTrackingEnabled) {
+          currentHeadPose = headPose;
+        }
+      });
+      headTrackingEnabled = true;
+      console.log('✅ Head tracking initialized and enabled');
+    }
+  } catch (err) {
+    console.warn('⚠️ Could not initialize head tracking:', err);
+  }
+  
+  // Add orbit controls for testing (disabled when head tracking is active)
   const controls = new OrbitControls(perspectiveCamera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
   controls.target.set(0, 60, 0); // Look slightly higher
+  controls.enabled = false; // Disable to allow head tracking control
   controls.update();
   
   // Add lighting for metallic dragon
@@ -1854,7 +1930,7 @@ export async function run({ scene }) {
   try {
     // Load the dragon boss
     const dragon = await boss.load('scene.gltf', './assets/tarisland_dragon/', loadingMessage);
-    dragon.position.set(0, 0, 0);
+    dragon.position.set(0, 0, 0); // Ground level
     dragon.scale.set(2, 2, 2);
     
     // Log bounding box to see model size
@@ -1991,9 +2067,9 @@ export async function run({ scene }) {
     
     // Character positions: left (-50), middle (0), right (50)
     const positions = [
-      { x: -50, z: 20 },  // Left
-      { x: 0, z: 30 },    // Middle
-      { x: 50, z: 20 }    // Right
+      { x: -50, z: 30 },  // Left - closer to dragon
+      { x: 0, z: 40 },    // Middle - closer to dragon
+      { x: 50, z: 30 }    // Right - closer to dragon
     ];
     
     // Create selected character first at middle position
@@ -2006,11 +2082,12 @@ export async function run({ scene }) {
       selectedCharacter = new Magician(sceneObj, 'USER');
     }
     await selectedCharacter.load();
-    selectedCharacter.setPosition(positions[1].x, 0, positions[1].z); // Middle position
+    selectedCharacter.setPosition(positions[1].x, 0, positions[1].z); // Middle position, ground level
     selectedCharacter.setScale(15, 15, 15);
     selectedCharacter.setRotation(0, Math.PI, 0);
+    selectedCharacter.model.visible = false; // Hide for first-person view
     characters.push(selectedCharacter);
-    console.log(`Created ${selectedClass} at position ${positions[1].x} as USER (middle)`);
+    console.log(`Created ${selectedClass} at position ${positions[1].x} as USER (middle) - hidden for first-person view`);
     
     // Create other two characters at side positions
     const otherTypes = characterTypes.filter(type => type !== selectedClass);
@@ -2028,7 +2105,7 @@ export async function run({ scene }) {
       }
       
       await character.load();
-      character.setPosition(positions[posIndex].x, 0, positions[posIndex].z);
+      character.setPosition(positions[posIndex].x, 0, positions[posIndex].z); // Ground level
       character.setScale(15, 15, 15);
       character.setRotation(0, Math.PI, 0);
       characters.push(character);
@@ -2126,23 +2203,101 @@ export async function run({ scene }) {
     console.log('  1, 2, 3 - Use action 1, 2, or 3');
     console.log('\nDURING BOSS ATTACK:');
     console.log('  3 - Quick defend (block/dodge)');
-    console.log('\nMANUAL TESTING:');
-    console.log('  Q - Select Swordman (left)');
-    console.log('  W - Select Archer (center)');
-    console.log('  E - Select Magician (right)');
-    console.log('  R - Select Boss');
-    console.log('\nPERFORM ACTION (after selecting):');
-    console.log('  1, 2, 3, ... - Perform action 1, 2, 3, etc.');
-    console.log('\nSwordman actions: 1=slash, 2=heavyslash, 3=block');
-    console.log('Archer actions: 1=shootarrow, 2=stab, 3=dodge');
-    console.log('Magician actions: 1=castspell, 2=castheavyspell, 3=healstamina');
-    console.log('Boss actions: 1=BreathFireHigh, 2=BreathFireLow, 3=Roar, 4=SweptClaw, 5=StompFoot, 6=Walk, 7=Fly, 8=SweptTail');
+    console.log('\n🎤 VOICE COMMANDS (Hold LEFT SHIFT to speak):');
+    console.log('  Say "slash", "heavy", "block", "dodge", "spell", "heal", "stab"');
     console.log('\n🛡️ DEFENSE: During boss attacks, press 3 to block (Swordman) or dodge (Archer)');
     console.log('=============================================\n');
     
-    // Keyboard listener for entity selection and actions
+    // Setup push-to-talk voice recognition for combat commands
+    let recognition = null;
+    let isRecording = false;
+    
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+      
+      recognition.onresult = (event) => {
+        const last = event.results.length - 1;
+        const command = event.results[last][0].transcript.toLowerCase().trim();
+        console.log('🎤 Voice command:', command);
+        
+        // Handle combat commands for user character
+        if (window.currentPlayerCharacter && !window.currentPlayerCharacter.isDead) {
+          const char = window.currentPlayerCharacter;
+          
+          // Attack commands
+          if (command.includes('slash') || command.includes('attack')) {
+            if (char.name === 'Swordman') {
+              window.turnSystem.playerAction(char, 'slash');
+            } else if (char.name === 'Archer') {
+              window.turnSystem.playerAction(char, 'shootarrow');
+            }
+          } else if (command.includes('heavy') || command.includes('strong')) {
+            if (char.name === 'Swordman') {
+              window.turnSystem.playerAction(char, 'heavyslash');
+            }
+          } else if (command.includes('stab')) {
+            if (char.name === 'Archer') {
+              window.turnSystem.playerAction(char, 'stab');
+            }
+          } else if (command.includes('spell') || command.includes('cast')) {
+            if (char.name === 'Magician') {
+              window.turnSystem.playerAction(char, 'castspell');
+            }
+          } else if (command.includes('heal')) {
+            if (char.name === 'Magician') {
+              window.turnSystem.playerAction(char, 'healstamina');
+            }
+          }
+          // Defense commands
+          else if (command.includes('block') || command.includes('defend')) {
+            if (char.name === 'Swordman' && char.isInDecisionWindow) {
+              char.performAction('block', THREE.LoopOnce);
+              char.makeDecision('block');
+            }
+          } else if (command.includes('dodge') || command.includes('evade')) {
+            if (char.name === 'Archer' && char.isInDecisionWindow) {
+              char.performAction('dodge', THREE.LoopOnce);
+              char.makeDecision('dodge');
+            }
+          }
+        }
+      };
+      
+      recognition.onend = () => {
+        isRecording = false;
+      };
+      
+      recognition.onerror = (event) => {
+        console.warn('Speech recognition error:', event.error);
+        isRecording = false;
+      };
+      
+      console.log('✅ Voice control enabled - hold LEFT SHIFT and speak');
+    } else {
+      console.warn('⚠️ Speech recognition not supported in this browser');
+    }
+    
+    // Keyboard listener for combat actions and push-to-talk
     window.addEventListener('keydown', (e) => {
       const key = e.key.toLowerCase();
+      
+      // Push-to-talk: Start voice recognition on left shift press
+      if (e.key === 'Shift' && e.location === KeyboardEvent.DOM_KEY_LOCATION_LEFT) {
+        if (recognition && !isRecording) {
+          try {
+            recognition.start();
+            isRecording = true;
+            console.log('🎤 Recording... (release shift to stop)');
+          } catch (err) {
+            console.warn('Could not start recording:', err);
+          }
+        }
+        return;
+      }
       
       // Start battle with TAB
       if (key === 'tab') {
@@ -2161,7 +2316,16 @@ export async function run({ scene }) {
           return;
         }
         
-        const actions = character.name === 'Swordman' ? ['slash', 'heavyslash', 'block'] : ['shootarrow', 'stab', 'dodge'];
+        // Get actions based on character class
+        let actions;
+        if (character.name === 'Swordman') {
+          actions = ['slash', 'heavyslash', 'block'];
+        } else if (character.name === 'Archer') {
+          actions = ['shootarrow', 'stab', 'dodge'];
+        } else if (character.name === 'Magician') {
+          actions = ['castspell', 'castheavyspell', 'healstamina'];
+        }
+        
         const actionIndex = parseInt(key) - 1;
         
         if (actionIndex < actions.length) {
@@ -2195,55 +2359,15 @@ export async function run({ scene }) {
           return; // Defense action handled
         }
       }
-      
-      // Entity selection (Q, W, E, R)
-      if (['q', 'w', 'e', 'r'].includes(key)) {
-        const entity = entityMap[key];
-        if (entity) {
-          selectedEntity = entity;
-          const name = entity === boss ? 'Boss' : entity.name;
-          console.log(`✓ Selected: ${name}`);
-          const actions = actionMaps[name] || [];
-          console.log(`  Available actions: ${actions.join(', ')}`);
+    });
+    
+    // Stop voice recognition on left shift release
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'Shift' && e.location === KeyboardEvent.DOM_KEY_LOCATION_LEFT) {
+        if (recognition && isRecording) {
+          recognition.stop();
+          console.log('🎤 Processing voice command...');
         }
-        return;
-      }
-      
-      // Action execution (1-9)
-      if (key >= '1' && key <= '9') {
-        if (!selectedEntity) {
-          console.log('⚠ No entity selected. Press Q, W, E, or R to select an entity first.');
-          return;
-        }
-        
-        const actionIndex = parseInt(key) - 1;
-        const entityName = selectedEntity === boss ? 'Boss' : selectedEntity.name;
-        const actions = actionMaps[entityName];
-        
-        if (!actions || actionIndex >= actions.length) {
-          console.log(`⚠ ${entityName} does not have action #${key}`);
-          return;
-        }
-        
-        const actionName = actions[actionIndex];
-        
-        // Execute action
-        if (selectedEntity === boss) {
-          // Boss actions are global functions
-          console.log(`🎬 Boss performing: ${actionName}`);
-          window[actionName]();
-        } else {
-          // Character actions use performAction method
-          console.log(`🎬 ${entityName} performing: ${actionName}`);
-          selectedEntity.performAction(actionName, THREE.LoopOnce);
-        }
-        return;
-      }
-      
-      // Legacy Z key for boss fire breath
-      if (e.key === 'z' || e.key === 'Z') {
-        console.log('Z key pressed - Playing BreathFireHigh attack');
-        window.BreathFireHigh();
       }
     });
     
@@ -2252,12 +2376,22 @@ export async function run({ scene }) {
       loadingMessage.remove();
     }
     
-    // Animation loop with perspective camera
+    // Animation loop with perspective camera and head tracking
     const clock = new THREE.Clock();
     function animate() {
       requestAnimationFrame(animate);
       
       const delta = clock.getDelta();
+      
+      // Update camera position based on head tracking
+      if (headTrackingEnabled && currentHeadPose) {
+        const newPos = headPoseToCamera(currentHeadPose, 4, 4, 2, 100, 20); // Pass baseY=5
+        perspectiveCamera.position.set(newPos.x, newPos.y, newPos.z);
+        perspectiveCamera.lookAt(0, 60, 0); // Look higher to see dragon flight
+      } else {
+        // Only update orbit controls when head tracking is not active
+        controls.update();
+      }
       
       // Update boss animations
       boss.update(delta);
@@ -2267,8 +2401,6 @@ export async function run({ scene }) {
       
       // Update effects
       effectManager.update(delta);
-      
-      controls.update();
       renderer.render(sceneObj, perspectiveCamera);
     }
     animate();
@@ -2345,7 +2477,7 @@ export async function run({ scene }) {
   } catch (error) {
     console.error("Error loading dragon model:", error);
     if (loadingMessage) {
-      loadingMessage.innerHTML = `Error loading model<br><span style='font-size: 16px; color: #ff6666;'>${error.message}</span>`;
+      loadingMessage.textContent = `Error loading model: ${error.message}`;
     }
   }
 }
